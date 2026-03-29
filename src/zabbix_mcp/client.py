@@ -147,6 +147,11 @@ class ClientManager:
             obj = getattr(obj, part)
         return obj(**params)
 
+    def get_version(self, server: str) -> str:
+        """Return the Zabbix API version string for the given server."""
+        client = self._get_client(server)
+        return str(client.api_version())
+
     def check_write(self, server: str) -> None:
         """Raise ReadOnlyError if the server is read-only."""
         srv = self.get_server_config(server)

@@ -51,24 +51,71 @@ def _snake_to_camel(name: str) -> str:
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 
-def _normalize_import_rules(params: dict[str, Any]) -> dict[str, Any]:
-    """Normalize configuration.import rules keys from snake_case to camelCase.
+def _normalize_import_rules(params: dict[str, Any], zabbix_version: str | None = None) -> dict[str, Any]:
+    """Normalize configuration.import rules for the target Zabbix version.
 
-    LLMs often generate snake_case keys (e.g. discovery_rules, value_maps,
-    template_dashboards) but the Zabbix API expects camelCase.
+    Handles two common issues:
+    1. snake_case keys — LLMs generate e.g. ``discovery_rules`` instead of
+       ``discoveryRules``.  Note: the Zabbix API is inconsistent — most rule
+       keys are camelCase but ``host_groups`` and ``template_groups`` (>=6.2)
+       are snake_case.
+    2. Version-specific group parameters — Zabbix <6.2 uses ``groups``,
+       >=6.2 uses ``host_groups`` + ``template_groups``.
     """
     if "rules" not in params or not isinstance(params["rules"], dict):
         return params
 
     rules = params["rules"]
+
+    # Keys that must stay snake_case (Zabbix >=6.2 API expects them this way)
+    _KEEP_SNAKE = {"host_groups", "template_groups"}
+
+    # Step 1: normalize key names
     normalized: dict[str, Any] = {}
     for key, value in rules.items():
-        normalized[_snake_to_camel(key) if "_" in key else key] = value
+        if key in _KEEP_SNAKE:
+            # Already correct snake_case for >=6.2
+            normalized[key] = value
+        elif "_" in key:
+            normalized[_snake_to_camel(key)] = value
+        else:
+            normalized[key] = value
+
+    # Step 2: fix camelCase variants of group keys that LLMs may generate
+    if "hostGroups" in normalized:
+        normalized.setdefault("host_groups", normalized.pop("hostGroups"))
+    if "templateGroups" in normalized:
+        normalized.setdefault("template_groups", normalized.pop("templateGroups"))
+
+    # Step 3: version-aware group parameter fixup
+    if zabbix_version:
+        major_minor = tuple(int(x) for x in zabbix_version.split(".")[:2])
+
+        if major_minor < (6, 2):
+            # Zabbix <6.2: only "groups" exists
+            groups_val = (
+                normalized.pop("host_groups", None)
+                or normalized.pop("template_groups", None)
+            )
+            if groups_val and "groups" not in normalized:
+                normalized["groups"] = groups_val
+            normalized.pop("host_groups", None)
+            normalized.pop("template_groups", None)
+        else:
+            # Zabbix >=6.2: "groups" was split into host_groups + template_groups
+            if "groups" in normalized:
+                val = normalized.pop("groups")
+                normalized.setdefault("host_groups", val)
+                normalized.setdefault("template_groups", val)
 
     return {**params, "rules": normalized}
 
 
-def _build_zabbix_params(method_def: MethodDef, kwargs: dict[str, Any]) -> Any:
+def _build_zabbix_params(
+    method_def: MethodDef,
+    kwargs: dict[str, Any],
+    zabbix_version: str | None = None,
+) -> Any:
     """Convert tool keyword arguments into Zabbix API parameters."""
     args = {k: v for k, v in kwargs.items() if k != "server" and v is not None}
 
@@ -79,9 +126,8 @@ def _build_zabbix_params(method_def: MethodDef, kwargs: dict[str, Any]) -> Any:
     # create/update/mass/special methods: the 'params' dict IS the API payload
     if "params" in args:
         params = args["params"]
-        # Normalize snake_case rule keys for configuration import methods
         if method_def.api_method in ("configuration.import", "configuration.importcompare"):
-            params = _normalize_import_rules(params)
+            params = _normalize_import_rules(params, zabbix_version)
         return params
 
     # For get methods: build params dict from individual arguments
@@ -119,7 +165,8 @@ def _make_tool_handler(
             if not method_def.read_only:
                 client_manager.check_write(server_name)
 
-            params = _build_zabbix_params(method_def, kwargs)
+            zabbix_version = client_manager.get_version(server_name)
+            params = _build_zabbix_params(method_def, kwargs, zabbix_version)
             result = client_manager.call(server_name, method_def.api_method, params)
 
             text = json.dumps(result, indent=2, default=str, ensure_ascii=False)

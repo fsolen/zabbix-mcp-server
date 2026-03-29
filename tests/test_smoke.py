@@ -251,7 +251,6 @@ class TestImportRulesNormalization(unittest.TestCase):
         self.assertEqual(_snake_to_camel("template_dashboards"), "templateDashboards")
         self.assertEqual(_snake_to_camel("template_linkage"), "templateLinkage")
         self.assertEqual(_snake_to_camel("media_types"), "mediaTypes")
-        self.assertEqual(_snake_to_camel("host_groups"), "hostGroups")
 
     def test_snake_to_camel_no_underscore(self):
         self.assertEqual(_snake_to_camel("hosts"), "hosts")
@@ -301,6 +300,67 @@ class TestImportRulesNormalization(unittest.TestCase):
         result = _normalize_import_rules(params)
         self.assertEqual(result["format"], "json")
         self.assertEqual(result["source"], "{}")
+
+    # --- host_groups / template_groups must stay snake_case (Zabbix >=6.2 API) ---
+
+    def test_host_groups_stays_snake_case(self):
+        params = {"format": "yaml", "source": "", "rules": {
+            "host_groups": {"createMissing": True},
+            "template_groups": {"createMissing": True},
+        }}
+        result = _normalize_import_rules(params)
+        self.assertIn("host_groups", result["rules"])
+        self.assertIn("template_groups", result["rules"])
+        self.assertNotIn("hostGroups", result["rules"])
+        self.assertNotIn("templateGroups", result["rules"])
+
+    def test_camel_hostGroups_converted_to_snake(self):
+        """LLM generates camelCase hostGroups/templateGroups — must become snake_case."""
+        params = {"format": "yaml", "source": "", "rules": {
+            "hostGroups": {"createMissing": True},
+            "templateGroups": {"updateExisting": True},
+        }}
+        result = _normalize_import_rules(params)
+        self.assertIn("host_groups", result["rules"])
+        self.assertIn("template_groups", result["rules"])
+        self.assertNotIn("hostGroups", result["rules"])
+        self.assertNotIn("templateGroups", result["rules"])
+
+    # --- version-aware group fixup ---
+
+    def test_version_62_groups_split(self):
+        """Zabbix >=6.2: 'groups' should be split into host_groups + template_groups."""
+        params = {"format": "yaml", "source": "", "rules": {
+            "groups": {"createMissing": True},
+        }}
+        result = _normalize_import_rules(params, zabbix_version="7.0.0")
+        self.assertIn("host_groups", result["rules"])
+        self.assertIn("template_groups", result["rules"])
+        self.assertNotIn("groups", result["rules"])
+
+    def test_version_60_merges_to_groups(self):
+        """Zabbix <6.2: host_groups/template_groups should merge into 'groups'."""
+        params = {"format": "yaml", "source": "", "rules": {
+            "host_groups": {"createMissing": True},
+            "template_groups": {"updateExisting": True},
+        }}
+        result = _normalize_import_rules(params, zabbix_version="6.0.30")
+        self.assertIn("groups", result["rules"])
+        self.assertNotIn("host_groups", result["rules"])
+        self.assertNotIn("template_groups", result["rules"])
+
+    def test_version_60_camel_groups_merge(self):
+        """Zabbix <6.2: camelCase hostGroups/templateGroups also merge into 'groups'."""
+        params = {"format": "yaml", "source": "", "rules": {
+            "hostGroups": {"createMissing": True},
+            "templateGroups": {"updateExisting": True},
+        }}
+        result = _normalize_import_rules(params, zabbix_version="6.0.0")
+        self.assertIn("groups", result["rules"])
+        self.assertNotIn("hostGroups", result["rules"])
+        self.assertNotIn("templateGroups", result["rules"])
+        self.assertNotIn("host_groups", result["rules"])
+        self.assertNotIn("template_groups", result["rules"])
 
 
 if __name__ == "__main__":

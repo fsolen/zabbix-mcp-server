@@ -4,7 +4,10 @@
 
 ### Fixed
 
-- **`configuration.import` snake_case rules error** — LLMs often generate snake_case keys in import rules (e.g. `discovery_rules`, `value_maps`, `template_dashboards`); the server now auto-normalizes them to the camelCase format expected by the Zabbix API
+- **`configuration.import` rules normalization** — LLMs generate inconsistent rule key names; the server now auto-normalizes them to match the Zabbix API:
+  - snake_case → camelCase for most keys (e.g. `discovery_rules` → `discoveryRules`)
+  - `hostGroups`/`templateGroups` → `host_groups`/`template_groups` (Zabbix >=6.2 expects snake_case for these)
+  - Version-aware group handling: `groups` ↔ `host_groups` + `template_groups` based on the target Zabbix server version (split at 6.2)
 
 ## v1.3 — 2026-03-29
 
