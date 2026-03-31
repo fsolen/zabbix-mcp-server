@@ -18,3 +18,4 @@ tests/mcp_test_helper.py
 tests/stress_test_*.py
 tests/verify_ui.js
 tests/integration/
+.DS_Store
