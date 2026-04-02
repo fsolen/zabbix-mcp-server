@@ -216,6 +216,8 @@ read_only = false
 
 The first server (`production`) is used as the default. To target a specific instance, just mention it naturally in your prompt:
 
+#### Prompt examples
+
 | Prompt                                                           | Target server        | What happens                                                        |
 |------------------------------------------------------------------|----------------------|---------------------------------------------------------------------|
 | *"Show me hosts with high CPU usage"*                            | `production` (default) | Queries the first defined server automatically                    |
