@@ -30,7 +30,8 @@ Full adversarial security audit of the entire codebase ([#2](https://github.com/
 - **CORS control** — new `cors_origins` config option; accepts a list of allowed origin URLs (e.g. `["https://app.example.com"]`); when not set, no CORS headers are sent and cross-origin browser requests are blocked (secure default); warns in the server log when wildcard `*` is used
 - **IP allowlist** — new `allowed_hosts` config option; accepts IP addresses and CIDR ranges (e.g. `["10.0.0.0/24", "192.168.1.100"]`); enforced as ASGI middleware returning `403 Forbidden` for unlisted IPs; supports both IPv4 and IPv6
 - **File import sandbox** — new `allowed_import_dirs` config option; whitelist of directories from which `source_file` may read files; the feature is disabled when this option is not set (secure by default)
-- **Security warnings at startup** — the server now logs warnings when: listening on `0.0.0.0` without TLS configured, listening on `0.0.0.0` without `auth_token`, or CORS is configured with wildcard `*`
+- **Security status summary at startup** — on every start the server logs a full security checklist (auth_token, TLS, IP allowlist, CORS, rate limit, read-only, SSL verification, source_file); disabled features are logged as warnings with a final hint listing the exact config keys to adjust
+- **Hidden server names in `health_check`** — Zabbix server identifiers are replaced with generic `server_1`, `server_2` labels to prevent leaking internal infrastructure naming
 
 ### Improved
 
