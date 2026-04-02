@@ -18,16 +18,18 @@ services:
   zabbix-mcp-server:
     build: .
     container_name: zabbix-mcp-server
-    restart: always
+    restart: unless-stopped
     # MCP_HOST  - host interface to bind on the Docker host (default: 127.0.0.1)
     # MCP_PORT  - port used inside the container and exposed on the Docker host (default: 8080)
     # Set these in .env to override without editing this file.
-    command: "--config /etc/zabbix-mcp/config.toml --host 0.0.0.0 --port ${MCP_PORT:-8080}"
+    command: ["sh", "-c", "exec python -m zabbix_mcp --config /etc/zabbix-mcp/config.toml --host 0.0.0.0 --port ${MCP_PORT:-8080}"]
     ports:
       - "${MCP_HOST:-127.0.0.1}:${MCP_PORT:-8080}:${MCP_PORT:-8080}"
     env_file:
       - path: .env
         required: false
+    environment:
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
     volumes:
       - ./config.toml:/etc/zabbix-mcp/config.toml:ro
       - logs:/var/log/zabbix-mcp

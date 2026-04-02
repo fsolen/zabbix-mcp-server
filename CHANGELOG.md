@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.13 — Unreleased
+
+### Added
+
+- **Docker `.env`-based port and host configuration** — `MCP_PORT` and `MCP_HOST` in `.env` now control both the container-internal port and the Docker host binding; previously `MCP_PORT` only affected the host side while the container was hardcoded to `8080`; `.env.example` added as a reference template; `port` in `config.toml` is ignored when running via Docker (overridden by `MCP_PORT`)
+
 ## v1.12 — 2026-04-02
 
 ### Security

@@ -187,11 +187,13 @@ Authorization: Bearer your-secret-token-here
 
 ```toml
 [server]
-# Option 1 - token directly in config:
+# ⚠⚠⚠ Only one auth_token can be active — choose based on your installation type! ⚠⚠⚠
+#
+# Local install — set the token directly:
 auth_token = "your-secret-token-here"
 
-# Option 2 - token from environment variable (recommended for Docker / production):
-auth_token = "${MCP_AUTH_TOKEN}"
+# Docker — uncomment this instead and set MCP_AUTH_TOKEN in .env (see Docker section):
+# auth_token = "${MCP_AUTH_TOKEN}"
 ```
 
 When `auth_token` is not set, the MCP server accepts unauthenticated connections. This is safe when bound to `127.0.0.1` (default) but **must be set** when the server is exposed to the network (`0.0.0.0`).
@@ -273,6 +275,8 @@ MCP_AUTH_TOKEN=...   # bearer token for MCP server authentication (optional)
 ```
 
 `MCP_PORT` controls both the container-internal port and the host-side binding — no need to edit `docker-compose.yml`. The `port` setting in `config.toml` is ignored when running via Docker (overridden by `MCP_PORT`).
+
+> **Security:** Docker deployments are typically exposed to the network. Set `MCP_AUTH_TOKEN` in `.env` and uncomment `auth_token = "${MCP_AUTH_TOKEN}"` in `config.toml` to require authentication.
 
 **Upgrade:**
 
