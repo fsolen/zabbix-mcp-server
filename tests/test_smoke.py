@@ -1454,5 +1454,267 @@ class TestBuildZabbixParams(unittest.TestCase):
                           f"{m.api_method}: array_param '{m.array_param}' not in params")
 
 
+class TestSecurityPathTraversal(unittest.TestCase):
+    """Security tests for path traversal attacks in source_file resolution."""
+
+    def test_dotdot_traversal_blocked(self):
+        """Path with ../../ to escape allowed directory is rejected."""
+        import tempfile
+        allowed = tempfile.gettempdir()
+        params = {"source_file": os.path.join(allowed, "..", "..", "etc", "passwd")}
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_source_file(params, allowed_import_dirs=[allowed])
+        self.assertIn("allowed import directories", str(ctx.exception))
+
+    def test_absolute_path_outside_allowed(self):
+        """Absolute path outside allowed dirs is rejected."""
+        params = {"source_file": "/etc/shadow"}
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_source_file(params, allowed_import_dirs=["/opt/zabbix-mcp/imports"])
+        self.assertIn("allowed import directories", str(ctx.exception))
+
+    def test_symlink_rejected(self):
+        """Symlink pointing to a valid file inside allowed dir is still rejected."""
+        import tempfile
+        tmpdir = tempfile.mkdtemp()
+        target = os.path.join(tmpdir, "template.yaml")
+        link = os.path.join(tmpdir, "link.yaml")
+        try:
+            with open(target, "w") as f:
+                f.write("zabbix_export:\n  version: '7.0'\n")
+            os.symlink(target, link)
+            params = {"source_file": link}
+            with self.assertRaises(ValueError) as ctx:
+                _resolve_source_file(params, allowed_import_dirs=[tmpdir])
+            self.assertIn("symbolic link", str(ctx.exception))
+        finally:
+            os.unlink(link)
+            os.unlink(target)
+            os.rmdir(tmpdir)
+
+    def test_symlink_escaping_allowed_dir(self):
+        """Symlink pointing outside allowed dir is rejected."""
+        import tempfile
+        tmpdir = tempfile.mkdtemp()
+        link = os.path.join(tmpdir, "escape.yaml")
+        try:
+            os.symlink("/etc/passwd", link)
+            params = {"source_file": link}
+            with self.assertRaises(ValueError) as ctx:
+                _resolve_source_file(params, allowed_import_dirs=[tmpdir])
+            self.assertIn("symbolic link", str(ctx.exception))
+        finally:
+            os.unlink(link)
+            os.rmdir(tmpdir)
+
+    def test_no_allowed_dirs_disables_feature(self):
+        """source_file is rejected when allowed_import_dirs is not configured."""
+        params = {"source_file": "/tmp/template.yaml"}
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_source_file(params)
+        self.assertIn("disabled", str(ctx.exception))
+
+    def test_empty_allowed_dirs_disables_feature(self):
+        """Empty allowed_import_dirs list disables the feature."""
+        params = {"source_file": "/tmp/template.yaml"}
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_source_file(params, allowed_import_dirs=[])
+        self.assertIn("disabled", str(ctx.exception))
+
+    def test_valid_file_in_allowed_dir(self):
+        """Legitimate file inside allowed dir works normally."""
+        import tempfile
+        tmpdir = tempfile.mkdtemp()
+        target = os.path.join(tmpdir, "valid.yaml")
+        try:
+            with open(target, "w") as f:
+                f.write("zabbix_export:\n  version: '7.0'\n")
+            params = {"source_file": target}
+            result = _resolve_source_file(params, allowed_import_dirs=[tmpdir])
+            self.assertIn("source", result)
+            self.assertNotIn("source_file", result)
+        finally:
+            os.unlink(target)
+            os.rmdir(tmpdir)
+
+
+class TestSecurityAuthBypass(unittest.TestCase):
+    """Security tests for authentication bypass attempts."""
+
+    def test_empty_token_rejected(self):
+        v = _BearerTokenVerifier("secret-token")
+        result = asyncio.run(v.verify_token(""))
+        self.assertIsNone(result)
+
+    def test_none_string_rejected(self):
+        v = _BearerTokenVerifier("secret-token")
+        result = asyncio.run(v.verify_token("None"))
+        self.assertIsNone(result)
+
+    def test_partial_token_rejected(self):
+        v = _BearerTokenVerifier("secret-token-12345")
+        result = asyncio.run(v.verify_token("secret-token"))
+        self.assertIsNone(result)
+
+    def test_token_with_extra_chars_rejected(self):
+        v = _BearerTokenVerifier("secret")
+        result = asyncio.run(v.verify_token("secret\x00"))
+        self.assertIsNone(result)
+
+    def test_token_case_sensitive(self):
+        v = _BearerTokenVerifier("Secret-Token")
+        result = asyncio.run(v.verify_token("secret-token"))
+        self.assertIsNone(result)
+
+    def test_valid_token_accepted(self):
+        v = _BearerTokenVerifier("correct-token")
+        result = asyncio.run(v.verify_token("correct-token"))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.client_id, "mcp-client")
+
+
+class TestSecurityAPIMethodValidation(unittest.TestCase):
+    """Security tests for API method injection prevention."""
+
+    def test_reject_double_dot_method(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "host..get", {})
+
+    def test_reject_method_with_underscore(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "host.__class__", {})
+
+    def test_reject_method_with_slash(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "../../etc/passwd", {})
+
+    def test_reject_method_without_dot(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "hostget", {})
+
+    def test_reject_triple_part_method(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "host.get.all", {})
+
+    def test_reject_method_with_numbers(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "host.get123", {})
+
+    def test_reject_empty_method(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ValueError):
+            mgr._do_call(None, "", {})
+
+
+class TestSecurityExtraParamsInjection(unittest.TestCase):
+    """Security tests for extra_params key injection prevention."""
+
+    def test_reject_dunder_key(self):
+        """__proto__ style keys should be silently dropped."""
+        md = MethodDef("host.get", "host_get", "d", read_only=True,
+                        params=[
+                            ParamDef("output", "str", "d"),
+                            ParamDef("extra_params", "dict", "d"),
+                        ])
+        result = _build_zabbix_params(md, {
+            "output": "extend",
+            "extra_params": {"__proto__": {"polluted": True}},
+        })
+        self.assertNotIn("__proto__", result)
+
+    def test_reject_numeric_start_key(self):
+        md = MethodDef("host.get", "host_get", "d", read_only=True,
+                        params=[
+                            ParamDef("output", "str", "d"),
+                            ParamDef("extra_params", "dict", "d"),
+                        ])
+        result = _build_zabbix_params(md, {
+            "extra_params": {"1invalid": "value"},
+        })
+        self.assertNotIn("1invalid", result)
+
+    def test_reject_special_char_key(self):
+        md = MethodDef("host.get", "host_get", "d", read_only=True,
+                        params=[
+                            ParamDef("output", "str", "d"),
+                            ParamDef("extra_params", "dict", "d"),
+                        ])
+        result = _build_zabbix_params(md, {
+            "extra_params": {"select;drop": "value", "key=val": "x"},
+        })
+        self.assertNotIn("select;drop", result)
+        self.assertNotIn("key=val", result)
+
+    def test_valid_extra_params_accepted(self):
+        md = MethodDef("host.get", "host_get", "d", read_only=True,
+                        params=[
+                            ParamDef("output", "str", "d"),
+                            ParamDef("extra_params", "dict", "d"),
+                        ])
+        result = _build_zabbix_params(md, {
+            "extra_params": {"selectInterfaces": "extend", "selectTags": "extend"},
+        })
+        self.assertEqual(result["selectInterfaces"], "extend")
+        self.assertEqual(result["selectTags"], "extend")
+
+
+class TestSecurityReadOnlyEnforcement(unittest.TestCase):
+    """Security tests for read-only mode enforcement."""
+
+    def test_readonly_blocks_create(self):
+        mgr = ClientManager(_make_config())
+        with self.assertRaises(ReadOnlyError):
+            mgr.check_write("test")
+
+    def test_readonly_default_true(self):
+        """Default server config should be read-only."""
+        cfg = _make_config()
+        self.assertTrue(cfg.zabbix_servers["test"].read_only)
+
+    def test_ip_allowlist_middleware_rejects_unlisted(self):
+        """IP not in allowlist should be rejected with 403."""
+        from zabbix_mcp.server import _IPAllowlistMiddleware
+
+        responses = []
+
+        async def mock_send(message):
+            responses.append(message)
+
+        async def mock_app(scope, receive, send):
+            pass
+
+        middleware = _IPAllowlistMiddleware(mock_app, ["10.0.0.0/24"])
+        scope = {"type": "http", "client": ("192.168.1.1", 12345)}
+        asyncio.run(middleware(scope, None, mock_send))
+        self.assertEqual(responses[0]["status"], 403)
+
+    def test_ip_allowlist_middleware_allows_listed(self):
+        """IP in allowlist should be passed through to app."""
+        from zabbix_mcp.server import _IPAllowlistMiddleware
+
+        app_called = []
+
+        async def mock_app(scope, receive, send):
+            app_called.append(True)
+
+        middleware = _IPAllowlistMiddleware(mock_app, ["10.0.0.0/24"])
+        scope = {"type": "http", "client": ("10.0.0.5", 12345)}
+        asyncio.run(middleware(scope, None, None))
+        self.assertTrue(app_called)
+
+    def test_ip_allowlist_invalid_cidr_raises(self):
+        """Invalid CIDR notation should raise ValueError at init."""
+        from zabbix_mcp.server import _IPAllowlistMiddleware
+
+        with self.assertRaises(ValueError):
+            _IPAllowlistMiddleware(None, ["not-an-ip"])
+
+
 if __name__ == "__main__":
     unittest.main()

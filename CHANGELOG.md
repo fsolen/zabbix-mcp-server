@@ -23,6 +23,7 @@ Full adversarial security audit of the entire codebase ([#2](https://github.com/
 - **Dockerfile base image unpinned** — `python:3.13-slim` replaced with `python:3.13.5-slim` to prevent silent base image changes
 - **Systemd unit insufficient hardening** — added `PrivateDevices`, `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectControlGroups`, `RestrictSUIDSGID`, `RestrictNamespaces`
 - **`install.sh` silent sed failure** — config modification via `sed` could fail silently; added error checking with user warning
+- **Symlink bypass in `source_file`** — symbolic links could bypass `allowed_import_dirs` path validation by resolving to targets outside the allowed boundary; `source_file` now rejects symlinks with a clear error message before path resolution
 
 ### Added
 
@@ -32,6 +33,7 @@ Full adversarial security audit of the entire codebase ([#2](https://github.com/
 - **File import sandbox** — new `allowed_import_dirs` config option; whitelist of directories from which `source_file` may read files; the feature is disabled when this option is not set (secure by default)
 - **Security status summary at startup** — on every start the server logs a full security checklist (auth_token, TLS, IP allowlist, CORS, rate limit, read-only, SSL verification, source_file); disabled features are logged as warnings with a final hint listing the exact config keys to adjust
 - **Hidden server names in `health_check`** — Zabbix server identifiers are replaced with generic `server_1`, `server_2` labels to prevent leaking internal infrastructure naming
+- **Security test suite** — 27 new tests covering path traversal (dot-dot, absolute path, symlink escape), auth bypass (empty token, partial token, null byte injection, case sensitivity), API method injection (`__class__`, double dot, slash, triple part), `extra_params` key injection (`__proto__`, special characters), read-only enforcement, and IP allowlist middleware (reject/allow/invalid CIDR)
 
 ### Fixed
 

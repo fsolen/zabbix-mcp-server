@@ -579,7 +579,14 @@ def _resolve_source_file(
             "in [server] config to specify directories from which files may be read."
         )
 
-    path = Path(params["source_file"]).resolve()
+    raw_path = Path(params["source_file"])
+    path = raw_path.resolve()
+
+    # Reject symlinks — they could escape allowed directories
+    if raw_path.is_symlink():
+        raise ValueError(
+            "source_file must not be a symbolic link (security restriction)."
+        )
 
     # Validate path is within an allowed directory (prevent path traversal)
     allowed = [Path(d).resolve() for d in allowed_import_dirs]
