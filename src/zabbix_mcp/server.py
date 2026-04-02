@@ -1083,14 +1083,16 @@ def _register_tools(
         f"Defaults to '{server_names[0]}' if omitted."
     )
 
-    # Write operation suffixes — used to enforce read_only on raw API calls.
-    _WRITE_SUFFIXES = (
-        ".create", ".update", ".delete",
-        ".massadd", ".massremove", ".massupdate",
-        ".import", ".execute", ".acknowledge",
-        ".push", ".clear", ".propagate",
-        ".generate", ".provision", ".unblock",
-        ".resettotp", ".replacehostinterfaces",
+    # Build a set of known read-only API methods from tool definitions.
+    _KNOWN_READ_ONLY = {m.api_method.lower() for m in ALL_METHODS if m.read_only}
+
+    # Fallback suffix whitelist for methods not in ALL_METHODS.
+    _READ_ONLY_SUFFIXES = (
+        ".get",
+        ".getscriptsbyevents", ".getscriptsbyhosts",
+        ".export", ".importcompare",
+        ".checkauthentication",
+        ".test",
     )
 
     async def zabbix_raw_api_call(
@@ -1107,9 +1109,14 @@ def _register_tools(
         try:
             server_name = client_manager.resolve_server(server_name)
 
-            # Enforce read_only: block write operations on read-only servers
+            # Enforce read_only: check known definitions first, then fall back
+            # to suffix whitelist for unknown methods.
             method_lower = method.lower()
-            if any(method_lower.endswith(s) for s in _WRITE_SUFFIXES):
+            is_read_only = (
+                method_lower in _KNOWN_READ_ONLY
+                or any(method_lower.endswith(s) for s in _READ_ONLY_SUFFIXES)
+            )
+            if not is_read_only:
                 client_manager.check_write(server_name)
 
             result = client_manager.call(server_name, method, params or {})

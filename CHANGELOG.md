@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.12 — (unreleased)
+
+### Security
+
+- **`zabbix_raw_api_call` switched from write-suffix blacklist to read-only whitelist** — previously, the raw API call tool blocked write operations by matching a hardcoded list of write suffixes (`.create`, `.update`, `.delete`, etc.); any new Zabbix API method with an unlisted suffix would bypass `read_only` enforcement; now uses a two-layer whitelist: first checks against known read-only methods from tool definitions (`ALL_METHODS`), then falls back to a conservative suffix whitelist (`.get`, `.export`, etc.); unknown methods are blocked by default on read-only servers
+
 ## v1.11 — 2026-04-02
 
 ### Security
