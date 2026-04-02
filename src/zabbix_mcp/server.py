@@ -1124,14 +1124,15 @@ def _register_tools(
             "mcp_server": "ok",
             "zabbix_servers": {},
         }
-        for name in client_manager.server_names:
+        for i, name in enumerate(client_manager.server_names, 1):
+            label = f"server_{i}"
             try:
                 client = client_manager._get_client(name)
                 client.api_version()
-                results["zabbix_servers"][name] = {"status": "ok"}
+                results["zabbix_servers"][label] = {"status": "ok"}
             except Exception as e:
                 logger.warning("Health check failed for '%s': %s", name, e)
-                results["zabbix_servers"][name] = {"status": "error"}
+                results["zabbix_servers"][label] = {"status": "error"}
         return json.dumps(results, indent=2)
 
     mcp.add_tool(health_check)
