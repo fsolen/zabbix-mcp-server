@@ -336,15 +336,24 @@ check_health() {
         return
     fi
 
-    info "Waiting for service to start..."
-    sleep 3
+    local max_attempts=5
+    local attempt=1
 
-    if curl -sf --max-time 5 "$url" &>/dev/null; then
-        ok "Health check passed: $url → OK"
-    else
-        warn "Health check failed — service may need a few more seconds to start."
-        warn "Test manually: curl $url"
-    fi
+    info "Waiting for service to start..."
+
+    while [[ $attempt -le $max_attempts ]]; do
+        sleep 2
+        if curl -sf --max-time 3 "$url" &>/dev/null; then
+            ok "Health check passed: $url → OK (attempt $attempt/$max_attempts)"
+            return
+        fi
+        warn "Health check attempt $attempt/$max_attempts failed — retrying..."
+        ((attempt++))
+    done
+
+    error "Health check failed after $max_attempts attempts!"
+    error "Test manually: curl $url"
+    error "Check logs:    tail -f $LOG_DIR/server.log"
 }
 
 # --------------------------------------------------------------------------- #
