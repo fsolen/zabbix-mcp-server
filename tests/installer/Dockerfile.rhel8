@@ -1,0 +1,14 @@
+# RHEL 8 / CentOS Stream 8 — system Python is 3.6, no python3.10+ by default
+# Expected: installer detects no suitable Python and prints install hint
+FROM rockylinux:8
+
+RUN dnf install -y python39 && dnf clean all
+
+COPY . /opt/src
+WORKDIR /opt/src
+
+# Dry-run should fail gracefully (python3.9 < 3.10)
+RUN chmod +x deploy/install.sh && \
+    deploy/install.sh --dry-run 2>&1 | tee /tmp/output.log; \
+    grep -q "No suitable Python" /tmp/output.log && echo "PASS: correctly rejected python3.9" || \
+    (echo "FAIL: should have rejected python3.9" && exit 1)

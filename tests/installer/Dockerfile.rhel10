@@ -1,0 +1,18 @@
+# RHEL 10 / Rocky 10 — python3.12 as system default
+FROM rockylinux:10
+
+RUN dnf install -y python3 python3-pip && dnf clean all
+
+COPY . /opt/src
+WORKDIR /opt/src
+
+# Dry-run should find python3 (3.12)
+RUN chmod +x deploy/install.sh && \
+    deploy/install.sh --dry-run 2>&1 | tee /tmp/output.log && \
+    grep -qE "Using python3" /tmp/output.log && echo "PASS: detected python3.12" || \
+    (echo "FAIL: did not detect python3.12" && cat /tmp/output.log && exit 1)
+
+# Full install
+RUN deploy/install.sh install 2>&1 | tee /tmp/install.log && \
+    /opt/zabbix-mcp/venv/bin/zabbix-mcp-server --version && \
+    echo "PASS: full install succeeded"

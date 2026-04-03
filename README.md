@@ -93,6 +93,8 @@ Done. The server is running on `http://127.0.0.1:8080/mcp`.
 
 ## Installation
 
+> **Detailed guide:** See [`INSTALL.md`](INSTALL.md) for step-by-step instructions for both on-prem (systemd) and Docker deployments, including uninstall, security checklist, and TLS setup.
+
 ### Requirements
 
 - Linux server with Python 3.10+
@@ -233,6 +235,12 @@ The first server (`production`) is used as the default. To target a specific ins
 
 The AI assistant maps your natural language to the correct `server` parameter automatically — no need to use technical syntax like `server = "staging"` in your prompts.
 
+#### High Availability
+
+The MCP server itself is **stateless** — there is no shared state between instances. You can run multiple MCP server instances behind a reverse proxy (nginx, HAProxy, Caddy) using round-robin load balancing. Each instance connects to Zabbix independently.
+
+> **Note:** When your Zabbix runs in HA mode with multiple frontends, the API is available on each frontend. Currently the MCP server connects to a single `url` per `[zabbix.<name>]` entry. Multi-frontend failover (connecting to multiple URLs for the same Zabbix instance) is a planned feature.
+
 ### Start
 
 ```bash
@@ -245,6 +253,25 @@ Verify the server is running:
 ```bash
 sudo systemctl status zabbix-mcp-server
 ```
+
+### Health Check
+
+The server exposes two health check mechanisms:
+
+| Method | Endpoint | Auth required | Returns |
+|--------|----------|---------------|---------|
+| HTTP endpoint | `GET /health` | No | `{"status": "ok"}` — confirms the HTTP server is running |
+| MCP tool | `health_check` | Yes (if auth_token set) | Full connectivity status of each configured Zabbix server |
+
+**Quick check from the command line:**
+
+```bash
+# Simple HTTP health check (no authentication needed)
+curl http://localhost:8080/health
+# → {"status":"ok"}
+```
+
+Use the HTTP `/health` endpoint for load balancer probes, uptime monitoring, and container orchestration readiness checks. Use the `health_check` MCP tool for deeper diagnostics including Zabbix server connectivity.
 
 ### Logs
 
@@ -416,7 +443,7 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>rate_limit</code></td><td>Max Zabbix API calls per minute per client (default: <code>300</code>, set to <code>0</code> to disable)</td></tr>
 <tr><td><code>tools</code></td><td>Filter exposed tools by category or prefix — e.g. <code>["monitoring", "alerts"]</code> (default: all ~225 tools)</td></tr>
 <tr><td><code>disabled_tools</code></td><td>Denylist counterpart to <code>tools</code> — exclude specific tool groups or prefixes</td></tr>
-<tr><td><code>tls_cert_file</code> / <code>tls_key_file</code></td><td>Enable native HTTPS — paths to TLS certificate and private key</td></tr>
+<tr><td><code>tls_cert_file</code> / <code>tls_key_file</code></td><td>Enable native HTTPS — paths to TLS certificate and private key (see <a href="#tls--https">TLS / HTTPS</a> below)</td></tr>
 <tr><td><code>cors_origins</code></td><td>List of allowed CORS origins (default: disabled)</td></tr>
 <tr><td><code>allowed_hosts</code></td><td>IP allowlist — IPs and CIDR ranges (e.g. <code>["10.0.0.0/24"]</code>)</td></tr>
 <tr><td><code>allowed_import_dirs</code></td><td>Directories for <code>source_file</code> imports (default: disabled)</td></tr>
@@ -427,6 +454,43 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>verify_ssl</code></td><td>Verify TLS certificates (default: <code>true</code>)</td></tr>
 <tr><td><code>skip_version_check</code></td><td>Skip zabbix-utils version compatibility check (default: <code>false</code>)</td></tr>
 </table>
+
+## TLS / HTTPS
+
+The server supports native HTTPS via `tls_cert_file` and `tls_key_file` in `config.toml`.
+
+**Certificate requirements depend on your MCP client:**
+
+| Client type | Self-signed cert | Publicly trusted cert (Let's Encrypt, etc.) |
+|---|---|---|
+| Local CLI clients (Claude Code, Cursor, etc.) | Works | Works |
+| Remote MCP connections (Claude Desktop cloud, web clients) | **Does not work** | Required |
+
+> **Why?** Remote MCP connections from Claude Desktop are brokered through Anthropic's cloud infrastructure — the request comes from Anthropic's servers to your MCP server, not from your local machine. Self-signed certificates will be rejected because they can't be verified by a trusted Certificate Authority.
+
+**Recommended production setup:** Use a reverse proxy (nginx, Caddy) with Let's Encrypt for automatic TLS certificate management:
+
+```
+Client → Caddy (HTTPS, Let's Encrypt) → MCP Server (HTTP, localhost:8080)
+```
+
+This way the MCP server runs plain HTTP on localhost while the reverse proxy handles TLS termination with a publicly trusted certificate.
+
+## Installer CLI
+
+```
+sudo ./deploy/install.sh [COMMAND] [OPTIONS]
+```
+
+| Command / Option | Description |
+|---|---|
+| `install` | Fresh installation (default) |
+| `update` | Update existing installation, preserve config |
+| `--dry-run` | Check prerequisites (Python, firewall, SELinux) without installing |
+| `--install-python` | Automatically install Python 3.12 if no suitable version found |
+| `-h`, `--help` | Show help |
+
+The installer automatically detects the best available Python (>=3.10). If none is found, it asks whether to install Python 3.12 automatically (or use `--install-python` to skip the prompt). It also checks for firewall/SELinux issues and verifies the health endpoint after installation.
 
 ## Zabbix Compatibility
 
