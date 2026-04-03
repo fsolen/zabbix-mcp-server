@@ -580,6 +580,16 @@ do_update() {
         exit 1
     fi
 
+    # Pull latest code if we're in a git repo
+    if [[ -d "$SCRIPT_DIR/.git" ]]; then
+        info "Pulling latest changes from git..."
+        if git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
+            ok "Git pull successful."
+        else
+            warn "Git pull failed — continuing with current local version."
+        fi
+    fi
+
     # Show current version
     local old_version
     old_version=$("$INSTALL_DIR/venv/bin/zabbix-mcp-server" --version 2>&1 || echo "unknown")
