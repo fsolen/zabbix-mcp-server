@@ -93,6 +93,8 @@ Done. The server is running on `http://127.0.0.1:8080/mcp`.
 
 ## Installation
 
+> **Detailed guide:** See [`INSTALL.md`](INSTALL.md) for step-by-step instructions for both on-prem (systemd) and Docker deployments, including uninstall, security checklist, and TLS setup.
+
 ### Requirements
 
 - Linux server with Python 3.10+
