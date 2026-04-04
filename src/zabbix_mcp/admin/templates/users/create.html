@@ -26,8 +26,17 @@
             {% endif %}
         </div>
 
+        {% if edit_mode and is_self %}
         <div class="form-group">
-            <label class="form-label" for="password">Password</label>
+            <label class="form-label" for="current_password">Current Password</label>
+            <input type="password" id="current_password" name="current_password" class="form-input"
+                   placeholder="Required to change your password" autocomplete="current-password">
+            <div class="form-hint">Required when changing your own password.</div>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <label class="form-label" for="password">{% if edit_mode %}New Password{% else %}Password{% endif %}</label>
             <input type="password" id="password" name="password" class="form-input"
                    placeholder="{% if edit_mode %}Leave empty to keep current{% else %}Enter password{% endif %}"
                    {% if not edit_mode %}required{% endif %} autocomplete="new-password" oninput="checkPasswordStrength(this.value)">
@@ -36,6 +45,14 @@
             </div>
             <div class="form-hint" id="password-hint">{% if edit_mode %}Leave empty to keep current password. {% endif %}Minimum 8 characters.</div>
         </div>
+
+        {% if edit_mode %}
+        <div class="form-group">
+            <label class="form-label" for="confirm_password">Confirm New Password</label>
+            <input type="password" id="confirm_password" name="confirm_password" class="form-input"
+                   placeholder="Repeat new password" autocomplete="new-password">
+        </div>
+        {% endif %}
 
         <div class="form-group">
             <label class="form-label" for="role">Role</label>

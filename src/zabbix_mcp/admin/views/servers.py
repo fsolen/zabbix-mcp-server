@@ -237,3 +237,38 @@ async def server_restart(request: Request) -> Response:
         logger.error("Restart failed: %s", e)
 
     return RedirectResponse("/servers", status_code=303)
+
+
+async def server_test_new(request: Request) -> Response:
+    """Test connection to a new Zabbix server before saving."""
+    admin_app = request.app.state.admin_app
+    session = admin_app.require_auth(request)
+    if not session:
+        return HTMLResponse("Unauthorized", status_code=401)
+
+    from starlette.responses import HTMLResponse
+    import html as _html
+
+    form = await request.form()
+    url = str(form.get("url", "")).strip()
+    api_token = str(form.get("api_token", "")).strip()
+    verify_ssl = form.get("verify_ssl") == "1"
+
+    if not url or not api_token:
+        return HTMLResponse('<span class="text-danger">URL and API token are required</span>')
+
+    try:
+        from zabbix_utils import ZabbixAPI
+        api = ZabbixAPI(url=url, validate_certs=verify_ssl, skip_version_check=True)
+        api.login(token=api_token)
+        version = _html.escape(str(api.api_version()))
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-green"></span>'
+            f'<span style="color:var(--color-success);"> Connected — Zabbix {version}</span>'
+        )
+    except Exception as e:
+        msg = _html.escape(str(e)[:120])
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-red"></span>'
+            f'<span style="color:var(--color-danger);"> {msg}</span>'
+        )

@@ -13,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
 from zabbix_mcp.admin.audit_writer import write_audit
-from zabbix_mcp.admin.auth import hash_password
+from zabbix_mcp.admin.auth import hash_password, verify_password
 from zabbix_mcp.admin.config_writer import (
     add_config_table,
     load_config_document,
@@ -128,16 +128,46 @@ async def user_detail(request: Request) -> Response:
     if not user:
         return RedirectResponse("/users", status_code=303)
 
+    is_self = (username == session.user)
+
     if request.method == "POST":
         form = await request.form()
         new_password = str(form.get("password", "")).strip()
+        confirm_password = str(form.get("confirm_password", "")).strip()
+        current_password = str(form.get("current_password", "")).strip()
         new_role = str(form.get("role", "")).strip()
+
+        error = None
+
+        # If changing own password, require current password
+        if is_self and new_password:
+            if not current_password:
+                error = "Current password is required to change your own password."
+            elif not verify_password(current_password, user.get("password_hash", "")):
+                error = "Current password is incorrect."
+
+        # Confirm password must match
+        if new_password and new_password != confirm_password:
+            error = "New password and confirmation do not match."
+
+        if new_password and len(new_password) < 8:
+            error = "Password must be at least 8 characters."
+
+        if error:
+            return admin_app.render("users/create.html", request, {
+                "active": "users",
+                "edit_mode": True,
+                "edit_username": username,
+                "edit_role": user.get("role", "viewer"),
+                "is_self": is_self,
+                "error": error,
+            })
 
         try:
             doc = load_config_document(admin_app.config_path)
             user_section = doc["admin"]["users"][username]
 
-            if new_password and len(new_password) >= 8:
+            if new_password:
                 user_section["password_hash"] = hash_password(new_password)
 
             if new_role in ("admin", "operator", "viewer"):
@@ -157,6 +187,7 @@ async def user_detail(request: Request) -> Response:
         "edit_mode": True,
         "edit_username": username,
         "edit_role": user.get("role", "viewer"),
+        "is_self": is_self,
     })
 
 

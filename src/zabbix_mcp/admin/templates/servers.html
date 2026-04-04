@@ -39,11 +39,44 @@
                 <input type="checkbox" name="verify_ssl" checked> Verify SSL
             </label>
         </div>
+        <div id="add-test-result" style="margin-bottom:12px;"></div>
         <div style="display:flex; gap:8px;">
-            <button type="submit" class="btn btn-primary">Add Server</button>
+            <button type="button" class="btn btn-ghost" id="add-test-btn" onclick="testNewServer()">&#x1F50C; Test Connection</button>
+            <button type="submit" class="btn btn-primary" id="add-save-btn" disabled>Add Server</button>
             <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-server-form').style.display='none'">Cancel</button>
         </div>
     </form>
+    <script>
+    function testNewServer() {
+        var url = document.querySelector('#add-server-form [name=url]').value;
+        var token = document.querySelector('#add-server-form [name=api_token]').value;
+        var ssl = document.querySelector('#add-server-form [name=verify_ssl]').checked;
+        var result = document.getElementById('add-test-result');
+        var saveBtn = document.getElementById('add-save-btn');
+        result.innerHTML = '<span class="text-muted">Testing...</span>';
+        saveBtn.disabled = true;
+        fetch('/servers/test-new', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'url=' + encodeURIComponent(url) + '&api_token=' + encodeURIComponent(token) + '&verify_ssl=' + (ssl ? '1' : '0'),
+        })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            result.innerHTML = html;
+            if (html.indexOf('status-dot-green') !== -1) {
+                saveBtn.disabled = false;
+            }
+        })
+        .catch(function() { result.innerHTML = '<span class="text-danger">Test failed</span>'; });
+    }
+    // Reset test when inputs change
+    document.querySelectorAll('#add-server-form input').forEach(function(el) {
+        el.addEventListener('input', function() {
+            document.getElementById('add-save-btn').disabled = true;
+            document.getElementById('add-test-result').innerHTML = '';
+        });
+    });
+    </script>
 </div>
 {% endif %}
 
