@@ -1713,3 +1713,10 @@ tbody tr:last-child td {
     top: 20px;
     right: 20px;
 }
+
+/* ---------- Test connection success fade ---------- */
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+}
