@@ -78,6 +78,12 @@ async def audit_view(request: Request) -> Response:
         "entries": entries,
         "action_types": sorted(action_types),
         "current_filter": action_filter,
+        "filters": {
+            "date_from": request.query_params.get("date_from", ""),
+            "date_to": request.query_params.get("date_to", ""),
+            "action": action_filter or "",
+            "search": request.query_params.get("search", ""),
+        },
     })
 
 

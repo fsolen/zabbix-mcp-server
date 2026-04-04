@@ -43,11 +43,13 @@ class TokenInfo:
     id: str  # config key (e.g. "ci_pipeline")
     name: str  # display name
     token_hash: str  # "sha256:hexdigest"
-    scopes: list[str]  # ["monitoring", "alerts"] or ["*"]
+    token_prefix: str = ""  # first 12 chars of hash for display
+    scopes: list[str] = field(default_factory=lambda: ["*"])  # ["monitoring", "alerts"] or ["*"]
     read_only: bool = True
     allowed_ips: list[str] | None = None  # CIDR ranges
     expires_at: str | None = None  # ISO 8601
     is_legacy: bool = False
+    revoked: bool = False
     # Runtime stats (in-memory only, not persisted)
     last_used_at: str | None = None
     last_used_ip: str | None = None
@@ -127,11 +129,14 @@ class TokenStore:
 
         Called during migration when [tokens] section doesn't exist yet.
         """
-        token_hash = f"sha256:{hashlib.sha256(auth_token.encode()).hexdigest()}"
+        hex_hash = hashlib.sha256(auth_token.encode()).hexdigest()
+        token_hash = f"sha256:{hex_hash}"
+        prefix = auth_token[:12] if len(auth_token) > 12 else auth_token[:4] + "..."
         info = TokenInfo(
             id="_legacy",
             name="Legacy Token",
             token_hash=token_hash,
+            token_prefix=prefix,
             scopes=["*"],
             read_only=False,
             is_legacy=True,
