@@ -12,7 +12,8 @@
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo">
-                <img src="/static/logo-symbol-white.svg" alt="initMAX" style="height: 28px;">
+                <img src="/static/logo-symbol-white.svg" alt="initMAX" class="logo-dark-theme" style="height: 28px;">
+                <img src="/static/logo-symbol-color.svg" alt="initMAX" class="logo-light-theme" style="height: 28px;">
                 <span class="logo-text">Zabbix MCP</span>
             </div>
         </div>
@@ -21,10 +22,10 @@
                 <span class="nav-icon">&#x1F4CA;</span> Dashboard</a></li>
             <li><a href="/tokens" class="nav-item {% if active == 'tokens' %}active{% endif %}">
                 <span class="nav-icon">&#x1F511;</span> MCP Tokens</a></li>
-            <li><a href="/users" class="nav-item {% if active == 'users' %}active{% endif %}">
-                <span class="nav-icon">&#x1F465;</span> Admin Users</a></li>
             <li><a href="/servers" class="nav-item {% if active == 'servers' %}active{% endif %}">
                 <span class="nav-icon">&#x1F5A5;</span> Zabbix Servers</a></li>
+            <li><a href="/users" class="nav-item {% if active == 'users' %}active{% endif %}">
+                <span class="nav-icon">&#x1F465;</span> Admin Users</a></li>
             <li><a href="/templates" class="nav-item {% if active == 'templates' %}active{% endif %}">
                 <span class="nav-icon">&#x1F4C4;</span> Report Templates</a></li>
             <li><a href="/settings" class="nav-item {% if active == 'settings' %}active{% endif %}">

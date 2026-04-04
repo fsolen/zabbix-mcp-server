@@ -18,13 +18,6 @@
             <div class="stat-label">MCP Tokens</div>
         </div>
     </a>
-    <a href="/users" class="stat-card" style="text-decoration:none; color:inherit;">
-        <div class="stat-icon">&#x1F465;</div>
-        <div class="stat-content">
-            <div class="stat-value">{{ stats.admin_users | default(0) }}</div>
-            <div class="stat-label">Admin Users</div>
-        </div>
-    </a>
     <a href="/servers" class="stat-card" style="text-decoration:none; color:inherit;">
         <div class="stat-icon">&#x1F5A5;</div>
         <div class="stat-content">
@@ -35,6 +28,13 @@
                 {{ stats.server_count | default(0) }}
             </div>
             <div class="stat-label">Zabbix Servers</div>
+        </div>
+    </a>
+    <a href="/users" class="stat-card" style="text-decoration:none; color:inherit;">
+        <div class="stat-icon">&#x1F465;</div>
+        <div class="stat-content">
+            <div class="stat-value">{{ stats.admin_users | default(0) }}</div>
+            <div class="stat-label">Admin Users</div>
         </div>
     </a>
     <a href="/templates" class="stat-card" style="text-decoration:none; color:inherit;">
