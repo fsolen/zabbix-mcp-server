@@ -10,7 +10,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Report Templates</h1>
-        <p class="page-subtitle">Manage HTML report templates for automated reports</p>
+        <p class="page-subtitle">Templates for MCP PDF reports and graph rendering — AI can generate these on demand via <code>report_generate</code> and <code>graph_render</code> tools</p>
     </div>
     <a href="/templates/create" class="btn btn-primary">&#x2B; Create Template</a>
 </div>
@@ -28,7 +28,10 @@
             </div>
             <div class="card-body">
                 <p class="text-sm" style="margin-bottom:16px;">{{ template.description }}</p>
-                <a href="/templates/create?duplicate={{ template.id }}" class="btn btn-ghost btn-sm">&#x1F4CB; Duplicate</a>
+                <div class="actions">
+                    <button class="btn btn-ghost btn-sm" onclick="previewBuiltin('{{ template.id }}')">&#x1F441; Preview</button>
+                    <a href="/templates/create?duplicate={{ template.id }}" class="btn btn-ghost btn-sm">&#x1F4CB; Duplicate</a>
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -70,4 +73,32 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Preview Modal -->
+<div class="modal-overlay" id="preview-modal" style="display:none;">
+    <div class="modal-card" style="max-width:900px; height:80vh;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px;">
+            <h3 id="preview-title">Template Preview</h3>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('preview-modal').style.display='none'">&times;</button>
+        </div>
+        <iframe id="preview-iframe" style="width:100%; height:calc(100% - 60px); border:none; background:white; border-radius: 0 0 var(--radius-lg) var(--radius-lg);"></iframe>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function previewBuiltin(templateId) {
+    document.getElementById('preview-title').textContent = templateId.replace(/_/g, ' ').replace(/\b\w/g, function(l){ return l.toUpperCase(); }) + ' — Preview';
+    var iframe = document.getElementById('preview-iframe');
+    iframe.src = '';
+    document.getElementById('preview-modal').style.display = 'flex';
+    fetch('/templates/' + templateId + '/preview')
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open(); doc.write(html); doc.close();
+        });
+}
+</script>
 {% endblock %}

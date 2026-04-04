@@ -242,15 +242,24 @@ async def template_preview(request: Request) -> Response:
         form = await request.form()
         html_content = str(form.get("html_content", ""))
     elif "template_id" in request.path_params:
-        # GET — load template content from file
+        # GET — load template content from file (custom or built-in)
         template_id = request.path_params["template_id"]
-        custom = _get_custom_templates(admin_app.config_path)
-        tmpl = next((t for t in custom if t["id"] == template_id), None)
-        if tmpl and tmpl.get("template_file"):
-            tmpl_file = tmpl["template_file"]
-            file_path = Path(tmpl_file) if tmpl_file.startswith("/") else TEMPLATE_DIR / tmpl_file
-            if file_path.exists():
-                html_content = file_path.read_text(encoding="utf-8")
+
+        # Check built-in templates first
+        if template_id in _REPORT_TEMPLATES:
+            builtin_path = TEMPLATE_DIR / _REPORT_TEMPLATES[template_id]
+            if builtin_path.exists():
+                html_content = builtin_path.read_text(encoding="utf-8")
+
+        # Then check custom templates
+        if not html_content:
+            custom = _get_custom_templates(admin_app.config_path)
+            tmpl = next((t for t in custom if t["id"] == template_id), None)
+            if tmpl and tmpl.get("template_file"):
+                tmpl_file = tmpl["template_file"]
+                file_path = Path(tmpl_file) if tmpl_file.startswith("/") else TEMPLATE_DIR / tmpl_file
+                if file_path.exists():
+                    html_content = file_path.read_text(encoding="utf-8")
 
     if not html_content:
         return HTMLResponse("<p>No content to preview.</p>")
