@@ -1335,13 +1335,27 @@ def _register_tools(
     # PDF Report generation (optional — requires weasyprint + jinja2)
     # ------------------------------------------------------------------
     try:
-        from zabbix_mcp.reporting.engine import ReportEngine, REPORTING_AVAILABLE
+        from zabbix_mcp.reporting.engine import ReportEngine, REPORTING_AVAILABLE, _REPORT_TEMPLATES
         if REPORTING_AVAILABLE:
             report_engine = ReportEngine(
                 logo_path=getattr(config.server, "report_logo", None),
                 company_name=getattr(config.server, "report_company", ""),
                 subtitle=getattr(config.server, "report_subtitle", "IT Monitoring Service"),
             )
+
+            # Load custom templates from [report_templates.*] config sections
+            try:
+                from zabbix_mcp.admin.config_writer import load_config_document as _load_cfg_doc, TOMLKIT_AVAILABLE as _TK
+                if _TK:
+                    _cfg_path = getattr(config, "_config_path", None)
+                    if _cfg_path:
+                        _cfg_doc = _load_cfg_doc(_cfg_path)
+                        _custom_tmpls = _cfg_doc.get("report_templates", {})
+                        if _custom_tmpls:
+                            report_engine.load_custom_templates({k: dict(v) for k, v in _custom_tmpls.items()})
+                            logger.info("Loaded %d custom report templates", len(_custom_tmpls))
+            except Exception as _e:
+                logger.warning("Failed to load custom report templates: %s", _e)
 
             async def _report_generate(
                 *,
@@ -1358,7 +1372,7 @@ def _register_tools(
                 from zabbix_mcp.reporting import data_fetcher
                 srv = client_manager.resolve_server(server or client_manager.default_server)
 
-                valid_types = ("availability", "capacity_host", "capacity_network", "backup")
+                valid_types = tuple(_REPORT_TEMPLATES.keys())
                 if report_type not in valid_types:
                     return json.dumps({"error": f"Invalid report_type. Must be one of: {', '.join(valid_types)}"})
 
@@ -1369,7 +1383,7 @@ def _register_tools(
                         {"hostgroupid": hostgroupid, "period": period, "company": company or report_engine.company_name},
                     )
                     pdf_bytes = await asyncio.to_thread(
-                        report_engine.render_pdf, report_type, context,
+                        report_engine.generate_report, report_type, context,
                     )
                     encoded = base64.b64encode(pdf_bytes).decode("ascii")
                     return json.dumps({

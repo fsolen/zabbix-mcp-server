@@ -26,6 +26,13 @@ logger = logging.getLogger("zabbix_mcp.admin")
 
 CUSTOM_TEMPLATE_DIR = Path("/var/log/zabbix-mcp/templates")
 
+_BUILTIN_DESCRIPTIONS = {
+    "availability": "Host availability with SLA gauge chart and events per host",
+    "capacity_host": "CPU, memory, and disk usage per host",
+    "capacity_network": "Network bandwidth and traffic per interface",
+    "backup": "Daily backup success/fail matrix (hosts \u00d7 days)",
+}
+
 
 def _get_builtin_templates() -> list[dict]:
     """List built-in report templates."""
@@ -35,6 +42,7 @@ def _get_builtin_templates() -> list[dict]:
         templates.append({
             "id": key,
             "name": key.replace("_", " ").title(),
+            "description": _BUILTIN_DESCRIPTIONS.get(key, ""),
             "filename": filename,
             "builtin": True,
             "exists": path.exists(),
@@ -91,15 +99,21 @@ async def template_create(request: Request) -> Response:
         # Check if duplicating a built-in
         duplicate_from = request.query_params.get("duplicate")
         initial_content = ""
+        initial_name = ""
+        initial_description = ""
         if duplicate_from and duplicate_from in _REPORT_TEMPLATES:
             src_path = TEMPLATE_DIR / _REPORT_TEMPLATES[duplicate_from]
             if src_path.exists():
                 initial_content = src_path.read_text(encoding="utf-8")
+            initial_name = f"{duplicate_from}_custom"
+            initial_description = _BUILTIN_DESCRIPTIONS.get(duplicate_from, "")
 
         return admin_app.render("report_templates/edit.html", request, {
             "active": "templates",
             "create_mode": True,
             "initial_content": initial_content,
+            "initial_name": initial_name,
+            "initial_description": initial_description,
             "duplicate_from": duplicate_from,
         })
 
@@ -122,6 +136,16 @@ async def template_create(request: Request) -> Response:
     import re
     safe_name = re.sub(r"[^a-z0-9_]", "_", name.lower())[:50]
     filename = f"{safe_name}.html"
+
+    # Check for name collision
+    existing_custom = _get_custom_templates(admin_app.config_path)
+    if any(t["id"] == safe_name for t in existing_custom):
+        return admin_app.render("report_templates/edit.html", request, {
+            "active": "templates",
+            "create_mode": True,
+            "error": f"A template with name '{safe_name}' already exists.",
+            "initial_content": html_content,
+        })
 
     # Write HTML to file in writable location
     try:
@@ -234,20 +258,41 @@ async def template_preview(request: Request) -> Response:
     # Render with sample context
     try:
         from jinja2.sandbox import SandboxedEnvironment
-        env = SandboxedEnvironment(autoescape=True)
+        from jinja2 import FileSystemLoader
+        env = SandboxedEnvironment(
+            autoescape=True,
+            loader=FileSystemLoader(str(TEMPLATE_DIR)),
+        )
         template = env.from_string(html_content)
+        import math
+        pct = 99.5
+        angle_deg = 180.0 - (pct / 100.0) * 180.0
+        angle_rad = math.radians(angle_deg)
+        end_x = 100.0 + 80.0 * math.cos(angle_rad)
+        end_y = 100.0 - 80.0 * math.sin(angle_rad)
+        gauge_arc = f"M 20 100 A 80 80 0 1 1 {end_x:.1f} {end_y:.1f}"
+
         rendered = template.render(
             company="Sample Company",
             subtitle="IT Monitoring Service",
             generated_at="2026-01-01 00:00 UTC",
             page_label="Page",
             logo_base64=None,
-            availability_pct=99.5,
-            hosts=[
-                {"name": "host-01", "availability": 100.0, "events": 0},
-                {"name": "host-02", "availability": 98.5, "events": 3},
-            ],
+            availability_pct=pct,
+            gauge_arc_path=gauge_arc,
+            total_events=3,
+            period_from="2026-01-01",
+            period_to="2026-01-31",
             period_label="01/2026",
+            hosts=[
+                {"name": "host-01", "host": "host-01", "availability_pct": 100.0, "event_count": 0},
+                {"name": "host-02", "host": "host-02", "availability_pct": 98.5, "event_count": 3},
+            ],
+            cpu_data=[{"host": "host-01", "avg": 15.2, "min": 2.1, "max": 78.5}],
+            memory_data=[{"host": "host-01", "avg": 45.0, "min": 30.0, "max": 82.0}],
+            disk_data=[{"host": "host-01", "avg": 55.0, "min": 40.0, "max": 70.0}],
+            days=list(range(1, 31)),
+            backup_matrix=[{"host": "host-01", "results": {d: True for d in range(1, 31)}}],
         )
         return HTMLResponse(rendered)
     except Exception as e:

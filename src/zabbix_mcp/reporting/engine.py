@@ -152,6 +152,13 @@ class ReportEngine:
         pdf_doc = weasyprint.HTML(string=html_string).write_pdf()
         return pdf_doc
 
+    def load_custom_templates(self, custom_templates: dict) -> None:
+        """Register custom templates from config [report_templates.*]."""
+        for key, tmpl in custom_templates.items():
+            template_file = tmpl.get("template_file", "")
+            if template_file:
+                _REPORT_TEMPLATES[key] = template_file
+
     def generate_report(self, report_type: str, data: dict, **options: object) -> bytes:
         """Generate a specific report type.
 
