@@ -12,15 +12,15 @@
 {% if servers %}
 <div class="grid-2">
     {% for server in servers %}
-    <div class="server-card" id="server-{{ loop.index }}">
+    <div class="server-card" id="server-{{ server.name }}">
         <div class="server-card-header">
             <span class="server-card-name">{{ server.name }}</span>
             <div class="server-card-badges">
                 {% if server.read_only %}
                 <span class="badge badge-warning">Read-only</span>
                 {% endif %}
-                {% if server.ssl %}
-                <span class="badge badge-success">SSL</span>
+                {% if server.verify_ssl %}
+                <span class="badge badge-success">SSL verified</span>
                 {% endif %}
             </div>
         </div>
@@ -28,10 +28,10 @@
         <div class="server-card-url">{{ server.url }}</div>
 
         <div class="server-card-meta">
-            <span class="status-inline" id="server-status-{{ loop.index }}">
-                {% if server.connected %}
+            <span class="status-inline" id="server-status-{{ server.name }}">
+                {% if server.status == "online" %}
                 <span class="status-dot status-dot-green"></span> Connected
-                {% elif server.error %}
+                {% elif server.status == "error" %}
                 <span class="status-dot status-dot-red"></span> Error
                 {% else %}
                 <span class="status-dot status-dot-yellow"></span> Unknown
@@ -42,17 +42,19 @@
             {% endif %}
         </div>
 
+        {% if server.error %}
+        <div class="server-card-error text-sm text-danger" style="margin-top: 8px;">
+            {{ server.error }}
+        </div>
+        {% endif %}
+
+        <hr style="border-color: var(--border-color); margin: 12px 0;">
+
         <div class="server-card-footer">
-            <span class="text-sm text-muted">
-                {% if server.error %}
-                {{ server.error }}
-                {% else %}
-                Last checked: {{ server.last_checked or 'Never' }}
-                {% endif %}
-            </span>
+            <span class="text-sm text-muted">Last checked: Just now</span>
             <button class="btn btn-ghost btn-sm"
-                    hx-post="/servers/{{ loop.index }}/test"
-                    hx-target="#server-status-{{ loop.index }}"
+                    hx-post="/servers/{{ server.name }}/test"
+                    hx-target="#server-status-{{ server.name }}"
                     hx-swap="innerHTML"
                     hx-indicator="this">
                 <span class="htmx-indicator spinner-sm"></span>
