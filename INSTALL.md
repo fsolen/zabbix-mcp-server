@@ -225,7 +225,7 @@ docker compose down -v
 
 ### Docker details
 
-- **Base image:** `python:3.13-slim` (multi-stage build)
+- **Base image:** `python:3.13.5-slim` (multi-stage build)
 - **Config:** `config.toml` mounted read-only at `/etc/zabbix-mcp/config.toml`
 - **Logs:** stored in a Docker volume (`logs`)
 - **Health check:** built-in Docker HEALTHCHECK hitting `/health` every 30s
