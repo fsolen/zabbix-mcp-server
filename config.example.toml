@@ -268,6 +268,48 @@ compact_output = true
 #   disabled_tools = ["script", "configuration"]
 
 # ---------------------------------------------------------------------------
+# Admin Portal
+# ---------------------------------------------------------------------------
+# Web-based administration portal for managing MCP tokens, users, report
+# templates, and server settings. Runs on a separate port.
+
+[admin]
+# Enable/disable the admin portal. When disabled, MCP server works normally
+# but the admin UI is not accessible. All config data remains in this file.
+enabled = true
+
+# Admin portal port (separate from MCP server for independent firewalling).
+# Shares host, TLS certificates, and CORS settings from [server] section.
+port = 9090
+
+# Admin users — create via the admin portal or manually here.
+# Password hashes are generated with scrypt. To set a password manually:
+#   python3 -c "import hashlib,os; s=os.urandom(16); print(f'scrypt:16384:8:1${s.hex()}${hashlib.scrypt(input(\"Password: \").encode(),salt=s,n=16384,r=8,p=1,dklen=32).hex()}')"
+# The installer generates the initial admin password automatically.
+
+# [admin.users.admin]
+# password_hash = "scrypt:16384:8:1$salt$hash"
+# role = "admin"     # admin | operator | viewer
+
+# ---------------------------------------------------------------------------
+# MCP Tokens (multi-token authentication)
+# ---------------------------------------------------------------------------
+# Define multiple API tokens for MCP clients. Each token can have different
+# scopes, IP restrictions, and read-only settings. Tokens are managed via
+# the admin portal or manually in this file.
+#
+# When no [tokens.*] sections exist, the legacy auth_token above is used.
+# When [tokens.*] sections exist, they take precedence over auth_token.
+
+# [tokens.example]
+# name = "My MCP Client"
+# token_hash = "sha256:<hex>"      # SHA-256 hash of the bearer token
+# scopes = ["*"]                   # Tool groups: monitoring, data_collection, alerts, users, administration, or * for all
+# read_only = true
+# allowed_ips = ["10.0.0.0/24"]   # Optional IP/CIDR whitelist
+# expires_at = "2026-12-31T23:59:59Z"  # Optional expiry (ISO 8601)
+
+# ---------------------------------------------------------------------------
 # Zabbix servers
 # ---------------------------------------------------------------------------
 # Define one or more Zabbix servers below. Each section name under [zabbix.*]

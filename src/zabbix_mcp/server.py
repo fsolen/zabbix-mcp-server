@@ -1835,7 +1835,8 @@ def run_server(
 
             if admin_enabled and config_path:
                 admin_port = admin_section.get("port", 9090)
-                admin_host = admin_section.get("host", "127.0.0.1")
+                # Admin shares host and TLS with MCP server
+                admin_host = host
 
                 from zabbix_mcp.admin.app import AdminApp
                 admin_app_instance = AdminApp(
@@ -1848,19 +1849,25 @@ def run_server(
                 # Run admin on a separate thread with its own uvicorn
                 import threading
 
+                admin_uvicorn_kwargs: dict[str, Any] = {
+                    "host": admin_host,
+                    "port": admin_port,
+                    "log_level": "warning",
+                    "access_log": False,
+                }
+                # Share TLS certificates with MCP server
+                if config.server.tls_cert_file and config.server.tls_key_file:
+                    admin_uvicorn_kwargs["ssl_certfile"] = config.server.tls_cert_file
+                    admin_uvicorn_kwargs["ssl_keyfile"] = config.server.tls_key_file
+
                 def _run_admin():
                     import uvicorn as admin_uvicorn
-                    admin_uvicorn.run(
-                        admin_app_instance.app,
-                        host=admin_host,
-                        port=admin_port,
-                        log_level="warning",
-                        access_log=False,
-                    )
+                    admin_uvicorn.run(admin_app_instance.app, **admin_uvicorn_kwargs)
 
                 admin_thread = threading.Thread(target=_run_admin, daemon=True)
                 admin_thread.start()
-                logger.info("Admin portal: http://%s:%d/admin/", admin_host, admin_port)
+                admin_scheme = "https" if config.server.tls_cert_file else "http"
+                logger.info("Admin portal: %s://%s:%d/admin/", admin_scheme, admin_host, admin_port)
 
             logger.info("#### Zabbix MCP Server started successfully ####")
             uvicorn.run(asgi_app, **uvicorn_kwargs)

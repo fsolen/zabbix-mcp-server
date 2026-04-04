@@ -293,6 +293,38 @@ Client → Caddy/nginx (HTTPS, Let's Encrypt) → MCP Server (HTTP, localhost:80
 
 See the [TLS / HTTPS section](README.md#tls--https) in README for details.
 
+### Admin Portal
+
+The admin portal provides a web-based interface for managing MCP tokens, users, report templates, and server settings.
+
+**Enable in config.toml:**
+
+```toml
+[admin]
+enabled = true
+port = 9090
+host = "127.0.0.1"
+```
+
+**First-time setup:**
+
+The installer generates an admin password automatically during `install` or `update`. To reset it:
+
+```bash
+sudo ./deploy/install.sh set-admin-password
+```
+
+**Access:** Open `http://localhost:9090/admin/` in your browser.
+
+**Features:**
+- MCP token management (create, revoke, scope control)
+- Admin user management (admin/operator/viewer roles)
+- Zabbix server status and connection testing
+- Report template editor with live preview
+- All config.toml settings editable via UI
+- Audit log viewer with CSV export
+- Dark/light mode with auto-detection
+
 ### Health monitoring
 
 | Method | URL | Auth | Purpose |
