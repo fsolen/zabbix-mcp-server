@@ -126,6 +126,7 @@ Usage:
 Commands:
   install       Fresh installation (default if no command given)
   update        Update existing installation, preserve config
+  uninstall     Complete removal of the server and all its data
 
 Options:
   --dry-run           Check prerequisites without installing anything
@@ -135,6 +136,7 @@ Options:
 Examples:
   sudo ./deploy/install.sh                       # fresh install
   sudo ./deploy/install.sh update                # update in place
+  sudo ./deploy/install.sh uninstall             # complete removal
   sudo ./deploy/install.sh --dry-run             # verify prerequisites
   sudo ./deploy/install.sh --install-python      # auto-install Python if needed
   sudo ./deploy/install.sh install --dry-run     # dry-run for fresh install
@@ -146,12 +148,21 @@ What it does:
     3. Installs the package from local git clone
     4. Copies config.example.toml → /etc/zabbix-mcp/config.toml
     5. Installs systemd unit and logrotate config
-    6. Checks firewall/SELinux and reports warnings
+    6. Checks file permissions, firewall/SELinux and reports warnings
 
   update:
     1. Reinstalls the package into existing virtualenv
     2. Updates systemd unit and logrotate config
-    3. Restarts the service if running
+    3. Checks and offers to fix file permissions
+    4. Restarts the service if running
+
+  uninstall:
+    1. Stops and disables the systemd service
+    2. Removes systemd unit and logrotate config
+    3. Removes /opt/zabbix-mcp (virtualenv, binaries)
+    4. Removes /etc/zabbix-mcp (config.toml)
+    5. Removes /var/log/zabbix-mcp (logs)
+    6. Removes the 'zabbix-mcp' system user
 
 Paths:
   Install dir:  /opt/zabbix-mcp
@@ -793,6 +804,93 @@ do_update() {
 }
 
 # --------------------------------------------------------------------------- #
+# Uninstall — complete removal
+# --------------------------------------------------------------------------- #
+do_uninstall() {
+    info "=== Zabbix MCP Server - Uninstall ==="
+    echo
+
+    warn "This will permanently remove:"
+    echo "  - Systemd service:  ${SERVICE_NAME}.service"
+    echo "  - Install dir:      $INSTALL_DIR (virtualenv, binaries)"
+    echo "  - Config dir:       $CONFIG_DIR (config.toml)"
+    echo "  - Log dir:          $LOG_DIR (server.log and rotated logs)"
+    echo "  - Logrotate config: /etc/logrotate.d/${SERVICE_NAME}"
+    echo "  - System user:      $SERVICE_USER"
+    echo
+
+    local answer
+    if [[ -t 0 ]]; then
+        read -rp "$(echo -e '\e[1;31m>>>\e[0m') Are you sure? Type 'yes' to confirm: " answer
+    else
+        read -r answer
+    fi
+
+    if [[ "$answer" != "yes" ]]; then
+        info "Uninstall cancelled."
+        exit 0
+    fi
+
+    echo
+
+    # Stop and disable service
+    if command -v systemctl &>/dev/null; then
+        if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+            spin "Stopping $SERVICE_NAME" systemctl stop "$SERVICE_NAME"
+        fi
+        if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+            spin "Disabling $SERVICE_NAME" systemctl disable "$SERVICE_NAME"
+        fi
+    fi
+
+    # Remove systemd unit
+    if [[ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
+        rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+        ok "Removed systemd unit"
+        if command -v systemctl &>/dev/null; then
+            systemctl daemon-reload &>/dev/null
+        fi
+    fi
+
+    # Remove logrotate config
+    if [[ -f "/etc/logrotate.d/${SERVICE_NAME}" ]]; then
+        rm -f "/etc/logrotate.d/${SERVICE_NAME}"
+        ok "Removed logrotate config"
+    fi
+
+    # Remove install directory (venv, binaries)
+    if [[ -d "$INSTALL_DIR" ]]; then
+        rm -rf "$INSTALL_DIR"
+        ok "Removed $INSTALL_DIR"
+    fi
+
+    # Remove config directory
+    if [[ -d "$CONFIG_DIR" ]]; then
+        rm -rf "$CONFIG_DIR"
+        ok "Removed $CONFIG_DIR"
+    fi
+
+    # Remove log directory
+    if [[ -d "$LOG_DIR" ]]; then
+        rm -rf "$LOG_DIR"
+        ok "Removed $LOG_DIR"
+    fi
+
+    # Remove system user
+    if id "$SERVICE_USER" &>/dev/null; then
+        userdel "$SERVICE_USER" 2>/dev/null
+        ok "Removed system user '$SERVICE_USER'"
+    fi
+
+    echo
+    ok "=== Uninstall complete ==="
+    echo
+    echo "  Note: This git repository ($SCRIPT_DIR) was NOT removed."
+    echo "  To remove it: rm -rf $SCRIPT_DIR"
+    echo
+}
+
+# --------------------------------------------------------------------------- #
 # Main — parse arguments
 # --------------------------------------------------------------------------- #
 COMMAND=""
@@ -807,7 +905,7 @@ for arg in "$@"; do
         --install-python)
             AUTO_INSTALL_PYTHON=true
             ;;
-        install|update|upgrade)
+        install|update|upgrade|uninstall)
             COMMAND="$arg"
             ;;
         *)
@@ -833,6 +931,9 @@ need_root
 case "$COMMAND" in
     update|upgrade)
         do_update
+        ;;
+    uninstall)
+        do_uninstall
         ;;
     install)
         do_install

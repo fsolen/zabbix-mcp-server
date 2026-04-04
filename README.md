@@ -489,6 +489,7 @@ sudo ./deploy/install.sh [COMMAND] [OPTIONS]
 |---|---|
 | `install` | Fresh installation (default) |
 | `update` | Update existing installation, preserve config |
+| `uninstall` | Complete removal — service, config, logs, virtualenv, system user |
 | `--dry-run` | Check prerequisites (Python, firewall, SELinux) without installing |
 | `--install-python` | Automatically install Python 3.12 if no suitable version found |
 | `-h`, `--help` | Show help |

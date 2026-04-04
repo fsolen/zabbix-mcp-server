@@ -13,6 +13,7 @@
 - **Installer permission check** — new `check_permissions()` runs during both `install` and `update`; detects wrong ownership on `/var/log/zabbix-mcp/`, `server.log`, and `config.toml`; lists all issues and offers an interactive fix prompt (default: **Y**); in non-interactive mode, prints the fix commands
 - **Graceful log file fallback** — if the application cannot write to `log_file` due to permission errors, it falls back to stderr (visible in journal) with a clear warning and fix command instead of crashing in a restart loop
 - **Config file permission error message** — if `config.toml` is unreadable (e.g. `root:root` with `0600`), the server now prints a human-readable error with the fix command instead of a raw Python traceback
+- **Installer `uninstall` command** — `sudo ./deploy/install.sh uninstall` performs a complete removal: stops and disables the service, removes the systemd unit, logrotate config, virtualenv (`/opt/zabbix-mcp`), configuration (`/etc/zabbix-mcp`), logs (`/var/log/zabbix-mcp`), and the `zabbix-mcp` system user; requires explicit `yes` confirmation
 
 ## v1.14 — 2026-04-04
 
