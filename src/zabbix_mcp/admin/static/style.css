@@ -6,7 +6,7 @@
 /* ---------- Font Faces ---------- */
 @font-face {
     font-family: 'Rubik';
-    src: url('/admin/static/rubik-regular.woff2') format('woff2');
+    src: url('/static/rubik-regular.woff2') format('woff2');
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -14,7 +14,7 @@
 
 @font-face {
     font-family: 'Rubik';
-    src: url('/admin/static/rubik-semibold.woff2') format('woff2');
+    src: url('/static/rubik-semibold.woff2') format('woff2');
     font-weight: 600;
     font-style: normal;
     font-display: swap;
@@ -1645,4 +1645,36 @@ tbody tr:last-child td {
     .login-card {
         padding: 24px 20px;
     }
+}
+
+/* ---------- Logo theme switching ---------- */
+/* Dark mode: show light logo, hide dark logo */
+:root .logo-dark-theme { display: inline; }
+:root .logo-light-theme { display: none; }
+
+/* Light mode: show dark logo, hide light logo */
+[data-theme="light"] .logo-dark-theme { display: none; }
+[data-theme="light"] .logo-light-theme { display: inline; }
+
+/* ---------- Login footer ---------- */
+.login-footer {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.login-page {
+    position: relative;
+    min-height: 100vh;
+    padding-bottom: 60px;
+}
+
+/* ---------- Sidebar copyright ---------- */
+.sidebar-footer .copyright {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    opacity: 0.6;
 }

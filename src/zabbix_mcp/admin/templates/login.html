@@ -10,10 +10,8 @@
     <div class="login-page">
         <div class="login-card">
             <div class="login-logo">
-                <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="32" height="32" rx="6" fill="#1f65f4"/>
-                    <path d="M8 22L14 10h4l6 12h-4l-3-6.5L12 22H8z" fill="#ffffff"/>
-                </svg>
+                <img src="/static/logo-horizontal-dark.svg" alt="initMAX" class="logo-light-theme" style="height: 48px;">
+                <img src="/static/logo-horizontal-light.svg" alt="initMAX" class="logo-dark-theme" style="height: 48px;">
             </div>
             <h1 class="login-title">Zabbix MCP Server</h1>
 
@@ -34,6 +32,9 @@
                     <button type="submit" class="btn btn-primary w-full btn-lg">Login</button>
                 </div>
             </form>
+        </div>
+        <div class="login-footer">
+            &copy; {{ year }} initMAX s.r.o. All rights reserved.
         </div>
     </div>
 

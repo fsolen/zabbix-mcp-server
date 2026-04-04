@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -120,6 +121,7 @@ class AdminApp:
             "active": "",
             "flash_message": None,
             "flash_type": "info",
+            "year": datetime.now().year,
         }
 
         # Session user
