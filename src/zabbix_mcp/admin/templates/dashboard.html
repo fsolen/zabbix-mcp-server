@@ -11,14 +11,14 @@
 
 <!-- Stat Cards -->
 <div class="stat-grid">
-    <div class="stat-card">
+    <a href="/tokens" class="stat-card" style="text-decoration:none; color:inherit;">
         <div class="stat-icon">&#x1F511;</div>
         <div class="stat-content">
             <div class="stat-value">{{ stats.active_tokens | default(0) }}</div>
             <div class="stat-label">Active Tokens</div>
         </div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/servers" class="stat-card" style="text-decoration:none; color:inherit;">
         <div class="stat-icon">&#x1F5A5;</div>
         <div class="stat-content">
             <div class="stat-value">
@@ -29,47 +29,38 @@
             </div>
             <div class="stat-label">Zabbix Servers</div>
         </div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/users" class="stat-card" style="text-decoration:none; color:inherit;">
         <div class="stat-icon">&#x1F465;</div>
         <div class="stat-content">
             <div class="stat-value">{{ stats.admin_users | default(0) }}</div>
             <div class="stat-label">Admin Users</div>
         </div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/templates" class="stat-card" style="text-decoration:none; color:inherit;">
         <div class="stat-icon">&#x1F4C4;</div>
         <div class="stat-content">
             <div class="stat-value">{{ stats.report_templates | default(0) }}</div>
             <div class="stat-label">Report Templates</div>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- Quick Actions -->
 <div class="quick-actions">
     <a href="/tokens/create" class="btn btn-primary">&#x1F511; Create Token</a>
-    <button class="btn btn-ghost"
-            hx-post="/servers/test-all"
-            hx-target="#connection-results"
-            hx-swap="innerHTML">
-        &#x1F50C; Test Connections
-    </button>
-    <div id="connection-results" style="display:inline-flex; align-items:center; gap:8px;"></div>
+    <a href="/servers" class="btn btn-ghost">&#x1F50C; Test Zabbix Servers</a>
 </div>
 
 <!-- Recent Audit Activity -->
 <div class="card">
     <div class="card-header">
         <h2 class="card-title">Recent Activity</h2>
-        <span class="text-sm text-muted">Auto-refreshes every 30s</span>
+        <span class="text-sm text-muted">Latest activity</span>
     </div>
     <div class="card-body">
         <div class="table-container" style="border:none;">
-            <table hx-get="/audit?limit=10&partial=1"
-                   hx-trigger="every 30s"
-                   hx-swap="innerHTML"
-                   hx-target="#recent-activity-body">
+            <table>
                 <thead>
                     <tr>
                         <th>Timestamp</th>

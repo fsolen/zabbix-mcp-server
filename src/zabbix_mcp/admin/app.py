@@ -116,7 +116,7 @@ class AdminApp:
         """Render a Jinja2 template with common context."""
         ctx: dict[str, Any] = {
             "version": "1.16",
-            "server_name": f":{self.config.server.port}",
+            "server_name": f"MCP: {self.config.server.host}:{self.config.server.port}/mcp",
             "current_user": "",
             "active": "",
             "flash_message": None,
