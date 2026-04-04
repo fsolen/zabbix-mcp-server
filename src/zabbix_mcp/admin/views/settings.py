@@ -23,12 +23,28 @@ logger = logging.getLogger("zabbix_mcp.admin")
 # Settings that require a server restart to take effect
 RESTART_REQUIRED = {"host", "port", "transport", "tls_cert_file", "tls_key_file"}
 
-# Map UI section names to actual config.toml locations
-SECTION_MAP = {
-    "server": "server",
-    "security": "server",      # rate_limit etc. live in [server]
-    "reporting": "server",     # report_company etc. live in [server]
-    "admin": "admin",
+# Map UI section names to actual config.toml section + allowed keys
+SECTION_CONFIG = {
+    "server": {
+        "toml_section": "server",
+        "allowed_keys": {"host", "port", "transport", "log_level", "compact_output"},
+        "min_role": "operator",
+    },
+    "security": {
+        "toml_section": "server",
+        "allowed_keys": {"rate_limit"},
+        "min_role": "operator",
+    },
+    "reporting": {
+        "toml_section": "server",
+        "allowed_keys": {"report_company", "report_subtitle", "report_logo"},
+        "min_role": "operator",
+    },
+    "admin": {
+        "toml_section": "admin",
+        "allowed_keys": {"port", "enabled"},
+        "min_role": "admin",  # only admin can modify admin section
+    },
 }
 
 
@@ -45,7 +61,6 @@ async def settings_view(request: Request) -> Response:
             doc = load_config_document(admin_app.config_path)
             server_cfg = dict(doc.get("server", {}))
             admin_cfg = dict(doc.get("admin", {}))
-            reporting_cfg = dict(doc.get("reporting", {}))
             # Remove sensitive values
             server_cfg.pop("auth_token", None)
             # Remove users sub-table from admin display
@@ -53,7 +68,6 @@ async def settings_view(request: Request) -> Response:
             # Merge all into flat dict
             settings.update(server_cfg)
             settings.update(admin_cfg)
-            settings.update(reporting_cfg)
         except Exception as e:
             logger.error("Failed to read config: %s", e)
 
@@ -72,9 +86,17 @@ async def settings_update(request: Request) -> Response:
         return RedirectResponse("/settings", status_code=303)
 
     section = request.path_params["section"]
-    config_section_name = SECTION_MAP.get(section)
-    if not config_section_name:
+    section_cfg = SECTION_CONFIG.get(section)
+    if not section_cfg:
         return RedirectResponse("/settings", status_code=303)
+
+    # Check minimum role for this section
+    if section_cfg["min_role"] == "admin" and session.role != "admin":
+        logger.warning("User '%s' (role=%s) denied access to settings/%s", session.user, session.role, section)
+        return RedirectResponse("/settings", status_code=303)
+
+    config_section_name = section_cfg["toml_section"]
+    allowed_keys = section_cfg["allowed_keys"]
 
     form = await request.form()
 
@@ -84,7 +106,12 @@ async def settings_update(request: Request) -> Response:
 
         needs_restart = False
         for key, value in form.items():
-            if key.startswith("_"):  # skip CSRF etc.
+            if key.startswith("_"):
+                continue
+
+            # SECURITY: reject keys not in allowlist
+            if key not in allowed_keys:
+                logger.warning("Rejected setting key '%s' in section '%s' (not in allowlist)", key, section)
                 continue
 
             # Type conversion
@@ -95,7 +122,6 @@ async def settings_update(request: Request) -> Response:
             elif value.isdigit():
                 value = int(value)
 
-            # Skip empty optional values
             if value == "" and key in config_section and config_section[key] is None:
                 continue
 
@@ -107,7 +133,6 @@ async def settings_update(request: Request) -> Response:
         save_config_document(admin_app.config_path, doc)
         logger.info("Settings [%s] updated by %s", section, session.user)
 
-        # Signal hot-reload for non-restart settings
         if not needs_restart:
             from zabbix_mcp.admin.config_writer import signal_reload
             signal_reload()

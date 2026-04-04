@@ -76,12 +76,14 @@ def _read_logo_as_base64(logo_path: str) -> str | None:
     Returns ``None`` when the path is invalid, not a regular file,
     a symbolic link, or has a disallowed extension.
     """
-    path = Path(logo_path).resolve()
+    raw_path = Path(logo_path)
 
-    # Security: reject symlinks
-    if path.is_symlink():
+    # Security: reject symlinks BEFORE resolving (prevents TOCTOU)
+    if raw_path.is_symlink():
         logger.warning("Logo path is a symbolic link, rejecting: %s", logo_path)
         return None
+
+    path = raw_path.resolve()
 
     if not path.is_file():
         logger.warning("Logo path is not a regular file: %s", logo_path)

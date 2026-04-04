@@ -210,7 +210,7 @@ async def template_preview(request: Request) -> Response:
     """Render template preview with sample data."""
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
-    if not session:
+    if not session or session.role == "viewer":
         return HTMLResponse("Unauthorized", status_code=401)
 
     html_content = ""
@@ -233,8 +233,8 @@ async def template_preview(request: Request) -> Response:
 
     # Render with sample context
     try:
-        import jinja2
-        env = jinja2.Environment(autoescape=True)
+        from jinja2.sandbox import SandboxedEnvironment
+        env = SandboxedEnvironment(autoescape=True)
         template = env.from_string(html_content)
         rendered = template.render(
             company="Sample Company",
@@ -251,7 +251,8 @@ async def template_preview(request: Request) -> Response:
         )
         return HTMLResponse(rendered)
     except Exception as e:
-        return HTMLResponse(f"<p style='color:red'>Template error: {e}</p>")
+        import html as _html
+        return HTMLResponse(f"<p style='color:red'>Template error: {_html.escape(str(e))}</p>")
 
 
 async def template_delete(request: Request) -> Response:

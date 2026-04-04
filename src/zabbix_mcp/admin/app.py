@@ -223,6 +223,7 @@ class AdminApp:
             session_token,
             httponly=True,
             samesite="strict",
+            secure=request.url.scheme == "https",
             max_age=self.sessions.SESSION_DURATION,
         )
         return response

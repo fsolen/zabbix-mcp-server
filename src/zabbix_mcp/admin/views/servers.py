@@ -183,16 +183,17 @@ async def server_test(request: Request) -> Response:
     client_manager = admin_app.client_manager
 
     from starlette.responses import HTMLResponse
+    import html as _html
     try:
         await asyncio.to_thread(client_manager.check_connection, server_name)
-        version = client_manager.get_version(server_name)
+        version = _html.escape(client_manager.get_version(server_name))
         return HTMLResponse(
             f'<span class="status-dot status-dot-green"></span> Connected'
             f'<span style="margin-left:8px;">Zabbix {version}</span>'
             f'<span class="test-ok" style="margin-left:8px; color:var(--color-success); animation: fadeOut 2s forwards;">&#x2713;</span>'
         )
     except Exception as e:
-        msg = str(e)[:100]
+        msg = _html.escape(str(e)[:100])
         return HTMLResponse(
             f'<span class="status-dot status-dot-red"></span> Error'
             f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-danger);">{msg}</span>'
