@@ -110,8 +110,7 @@ async def token_create(request: Request) -> Response:
     # Show the raw token ONCE
     return admin_app.render("tokens/create.html", request, {
         "active": "tokens",
-        "created": True,
-        "raw_token": raw_token,
+        "created_token": raw_token,
         "token_name": name,
         "token_id": token_id,
     })
