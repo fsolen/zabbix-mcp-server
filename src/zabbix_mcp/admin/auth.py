@@ -91,7 +91,7 @@ class Session:
     token: str
     created_at: float
     expires_at: float
-    ip: str
+    ip: str  # Stored for audit/logging, not validated (users may change IP during session)
 
 
 class SessionManager:
@@ -172,11 +172,14 @@ class LoginRateLimiter:
         self._attempts[ip] = attempts
 
         if len(attempts) >= self.MAX_ATTEMPTS:
-            # Check if lockout period has passed since last attempt
+            # Block if last attempt was less than LOCKOUT seconds ago
             if attempts and now - attempts[-1] < self.LOCKOUT:
                 return False
+            # Lockout expired — reset attempts so user can try again
+            self._attempts[ip] = []
+            return True
 
-        return len(attempts) < self.MAX_ATTEMPTS
+        return True
 
     def record_attempt(self, ip: str) -> None:
         """Record a failed login attempt."""

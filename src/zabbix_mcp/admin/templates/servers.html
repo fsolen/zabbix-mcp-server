@@ -7,9 +7,12 @@
         <h1 class="page-title">Zabbix Servers</h1>
         <p class="page-subtitle">Configured Zabbix server connections</p>
     </div>
+    {% if current_user_role != 'viewer' %}
     <button class="btn btn-primary" onclick="document.getElementById('add-server-form').style.display = document.getElementById('add-server-form').style.display === 'none' ? 'block' : 'none'">&#x2B; Add Server</button>
+    {% endif %}
 </div>
 
+{% if current_user_role != 'viewer' %}
 <!-- Add Server Form (hidden by default) -->
 <div id="add-server-form" class="card mb-4" style="display:none; max-width:640px;">
     <h3 style="margin-top:0;">Add Zabbix Server</h3>
@@ -42,6 +45,7 @@
         </div>
     </form>
 </div>
+{% endif %}
 
 <div class="alert alert-warning" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning);">
     &#x26A0;&#xFE0F; Server changes in config.toml require a service restart to take effect.
@@ -89,7 +93,9 @@
 
         <div class="server-card-footer" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
             <div class="actions">
+                {% if current_user_role != 'viewer' %}
                 <a href="/servers/{{ server.name }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+                {% endif %}
                 <button class="btn btn-ghost btn-sm"
                         hx-post="/servers/{{ server.name }}/test"
                         hx-target="#server-status-{{ server.name }}"
@@ -98,9 +104,11 @@
                 <span class="htmx-indicator spinner-sm"></span>
                 Test Connection
             </button>
+                {% if current_user_role != 'viewer' %}
                 <form method="post" action="/servers/{{ server.name }}/delete" style="display:inline;">
                     <button class="btn btn-danger btn-sm" onclick="return confirm('Delete server {{ server.name }}?')">Delete</button>
                 </form>
+                {% endif %}
             </div>
         </div>
     </div>

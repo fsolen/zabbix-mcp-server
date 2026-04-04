@@ -1867,7 +1867,7 @@ def run_server(
                 admin_thread = threading.Thread(target=_run_admin, daemon=True)
                 admin_thread.start()
                 admin_scheme = "https" if config.server.tls_cert_file else "http"
-                logger.info("Admin portal: %s://%s:%d/admin/", admin_scheme, admin_host, admin_port)
+                logger.info("Admin portal: %s://%s:%d/", admin_scheme, admin_host, admin_port)
 
             logger.info("#### Zabbix MCP Server started successfully ####")
             uvicorn.run(asgi_app, **uvicorn_kwargs)

@@ -34,14 +34,14 @@
             <div class="password-strength">
                 <div class="password-strength-bar" id="password-bar"></div>
             </div>
-            <div class="form-hint" id="password-hint">{% if edit_mode %}Leave empty to keep current password. {% endif %}Use at least 8 characters with mixed case, numbers, and symbols.</div>
+            <div class="form-hint" id="password-hint">{% if edit_mode %}Leave empty to keep current password. {% endif %}Minimum 8 characters.</div>
         </div>
 
         <div class="form-group">
             <label class="form-label" for="role">Role</label>
             <select id="role" name="role" class="form-select" required>
                 <option value="viewer" {% if edit_role == 'viewer' %}selected{% endif %}>Viewer — Read-only access</option>
-                <option value="operator" {% if edit_role == 'operator' %}selected{% endif %}>Operator — Manage tokens and view settings</option>
+                <option value="operator" {% if edit_role == 'operator' %}selected{% endif %}>Operator — Manage tokens and templates</option>
                 <option value="admin" {% if edit_role == 'admin' or not edit_mode %}selected{% endif %}>Admin — Full access</option>
             </select>
             <div class="form-hint">Determines what actions the user can perform in the admin portal.</div>
@@ -71,7 +71,7 @@ function checkPasswordStrength(password) {
     bar.className = 'password-strength-bar';
     if (password.length === 0) {
         bar.style.width = '0';
-        hint.textContent = 'Use at least 8 characters with mixed case, numbers, and symbols.';
+        hint.textContent = 'Minimum 8 characters.';
     } else if (score <= 2) {
         bar.classList.add('strength-weak');
         hint.textContent = 'Weak password';

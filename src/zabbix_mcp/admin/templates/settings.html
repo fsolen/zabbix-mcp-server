@@ -59,9 +59,11 @@
                 <div class="form-hint">MCP transport protocol. Requires restart.</div>
             </div>
         </div>
+        {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Server Settings</button>
         </div>
+        {% endif %}
     </form>
 </div>
 
@@ -108,9 +110,11 @@
                 <div class="form-hint">Admin portal session timeout duration.</div>
             </div>
         </div>
+        {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Security Settings</button>
         </div>
+        {% endif %}
     </form>
 </div>
 
@@ -149,9 +153,11 @@
                 <div class="form-hint">Default height for rendered graph images (pixels).</div>
             </div>
         </div>
+        {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Reporting Settings</button>
         </div>
+        {% endif %}
     </form>
 </div>
 
@@ -195,9 +201,11 @@
                 <div class="form-hint">Number of days to retain audit log entries.</div>
             </div>
         </div>
+        {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Admin Settings</button>
         </div>
+        {% endif %}
     </form>
 </div>
 {% endblock %}

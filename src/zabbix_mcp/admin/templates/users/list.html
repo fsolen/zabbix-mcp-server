@@ -7,7 +7,9 @@
         <h1 class="page-title">Users</h1>
         <p class="page-subtitle">Manage admin portal user accounts</p>
     </div>
+    {% if current_user_role != 'viewer' %}
     <a href="/users/create" class="btn btn-primary">&#x2B; Create User</a>
+    {% endif %}
 </div>
 
 <div class="table-container">

@@ -23,6 +23,14 @@ logger = logging.getLogger("zabbix_mcp.admin")
 # Settings that require a server restart to take effect
 RESTART_REQUIRED = {"host", "port", "transport", "tls_cert_file", "tls_key_file"}
 
+# Map UI section names to actual config.toml locations
+SECTION_MAP = {
+    "server": "server",
+    "security": "server",      # rate_limit etc. live in [server]
+    "reporting": "server",     # report_company etc. live in [server]
+    "admin": "admin",
+}
+
 
 async def settings_view(request: Request) -> Response:
     admin_app = request.app.state.admin_app
@@ -64,14 +72,15 @@ async def settings_update(request: Request) -> Response:
         return RedirectResponse("/settings", status_code=303)
 
     section = request.path_params["section"]
-    if section not in ("server", "admin", "reporting", "security"):
+    config_section_name = SECTION_MAP.get(section)
+    if not config_section_name:
         return RedirectResponse("/settings", status_code=303)
 
     form = await request.form()
 
     try:
         doc = load_config_document(admin_app.config_path)
-        config_section = doc.get(section, {})
+        config_section = doc.get(config_section_name, {})
 
         needs_restart = False
         for key, value in form.items():

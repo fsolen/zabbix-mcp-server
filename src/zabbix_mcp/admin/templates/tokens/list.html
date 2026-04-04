@@ -7,7 +7,9 @@
         <h1 class="page-title">MCP Tokens</h1>
         <p class="page-subtitle">Manage API tokens for MCP client access</p>
     </div>
+    {% if current_user_role != 'viewer' %}
     <a href="/tokens/create" class="btn btn-primary">&#x2B; Create Token</a>
+    {% endif %}
 </div>
 
 <div class="table-container">

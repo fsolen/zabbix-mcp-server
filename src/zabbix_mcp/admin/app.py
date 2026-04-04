@@ -42,8 +42,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 class AdminApp:
     """Admin portal application.
 
-    Wraps a Starlette app with session auth, CSRF protection,
-    and Jinja2 template rendering.
+    Wraps a Starlette app with session auth and Jinja2 template rendering.
+    CSRF protection via SameSite=Strict session cookies.
     """
 
     def __init__(
@@ -142,6 +142,7 @@ class AdminApp:
         session = self._get_session(request)
         if session:
             ctx["current_user"] = session.user
+            ctx["current_user_role"] = session.role
 
         if context:
             ctx.update(context)

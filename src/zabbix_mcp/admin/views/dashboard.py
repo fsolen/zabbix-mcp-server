@@ -63,6 +63,19 @@ async def dashboard(request: Request) -> Response:
             "read_only": srv_config.read_only,
         })
 
+    # Count report templates
+    report_template_count = 0
+    try:
+        from zabbix_mcp.reporting.engine import _REPORT_TEMPLATES
+        report_template_count = len(_REPORT_TEMPLATES)
+        # Add custom templates from config
+        if TOMLKIT_AVAILABLE:
+            doc = load_config_document(admin_app.config_path)
+            custom = doc.get("report_templates", {})
+            report_template_count += len(custom)
+    except Exception:
+        pass
+
     # Recent audit entries
     recent_audit = []
     if AUDIT_LOG_PATH.exists():
@@ -85,6 +98,7 @@ async def dashboard(request: Request) -> Response:
             "server_count": len(servers),
             "online_servers": sum(1 for s in servers if s["status"] == "online"),
             "admin_users": admin_user_count,
+            "report_templates": report_template_count,
         },
         "servers": servers,
         "recent_audit": recent_audit[:10],

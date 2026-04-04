@@ -66,7 +66,7 @@ async def server_create(request: Request) -> Response:
     """Create a new Zabbix server in config.toml."""
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
-    if not session or session.role == "viewer":
+    if not session or session.role != "admin":
         return RedirectResponse("/servers", status_code=303)
 
     form = await request.form()
@@ -103,7 +103,7 @@ async def server_edit(request: Request) -> Response:
     """Edit a Zabbix server in config.toml."""
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
-    if not session or session.role == "viewer":
+    if not session or session.role != "admin":
         return RedirectResponse("/servers", status_code=303)
 
     server_name = request.path_params["server_name"]
