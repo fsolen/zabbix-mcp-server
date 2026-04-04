@@ -3,15 +3,24 @@
 # Copyright (C) 2026 initMAX s.r.o.
 #
 
-"""Zabbix server status views — read-only overview + connection test."""
+"""Zabbix server views — status, create, edit, delete, test connection."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
+
+from zabbix_mcp.admin.config_writer import (
+    add_config_table,
+    load_config_document,
+    remove_config_table,
+    save_config_document,
+    TOMLKIT_AVAILABLE,
+)
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
@@ -52,6 +61,110 @@ async def servers_view(request: Request) -> Response:
     })
 
 
+async def server_create(request: Request) -> Response:
+    """Create a new Zabbix server in config.toml."""
+    admin_app = request.app.state.admin_app
+    session = admin_app.require_auth(request)
+    if not session or session.role == "viewer":
+        return RedirectResponse("/servers", status_code=303)
+
+    form = await request.form()
+    name = str(form.get("name", "")).strip()
+    url = str(form.get("url", "")).strip()
+    api_token = str(form.get("api_token", "")).strip()
+    read_only = "read_only" in form
+    verify_ssl = "verify_ssl" in form
+
+    if not name or not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name):
+        return RedirectResponse("/servers", status_code=303)
+
+    if not url.startswith(("http://", "https://")):
+        return RedirectResponse("/servers", status_code=303)
+
+    try:
+        server_data = {
+            "url": url,
+            "api_token": api_token,
+            "read_only": read_only,
+            "verify_ssl": verify_ssl,
+        }
+        add_config_table(admin_app.config_path, "zabbix", name, server_data)
+        logger.info("Zabbix server '%s' added by %s", name, session.user)
+    except Exception as e:
+        logger.error("Failed to add server: %s", e)
+
+    return RedirectResponse("/servers", status_code=303)
+
+
+async def server_edit(request: Request) -> Response:
+    """Edit a Zabbix server in config.toml."""
+    admin_app = request.app.state.admin_app
+    session = admin_app.require_auth(request)
+    if not session or session.role == "viewer":
+        return RedirectResponse("/servers", status_code=303)
+
+    server_name = request.path_params["server_name"]
+
+    if request.method == "GET":
+        # Read current server config
+        try:
+            doc = load_config_document(admin_app.config_path)
+            zabbix = doc.get("zabbix", {})
+            srv = dict(zabbix.get(server_name, {}))
+        except Exception:
+            srv = {}
+
+        if not srv:
+            return RedirectResponse("/servers", status_code=303)
+
+        return admin_app.render("servers_edit.html", request, {
+            "active": "servers",
+            "server_name": server_name,
+            "server": srv,
+        })
+
+    # POST — save changes
+    form = await request.form()
+    url = str(form.get("url", "")).strip()
+    api_token = str(form.get("api_token", "")).strip()
+    read_only = "read_only" in form
+    verify_ssl = "verify_ssl" in form
+
+    try:
+        doc = load_config_document(admin_app.config_path)
+        zabbix = doc.get("zabbix", {})
+        if server_name in zabbix:
+            if url:
+                zabbix[server_name]["url"] = url
+            if api_token:
+                zabbix[server_name]["api_token"] = api_token
+            zabbix[server_name]["read_only"] = read_only
+            zabbix[server_name]["verify_ssl"] = verify_ssl
+            save_config_document(admin_app.config_path, doc)
+            logger.info("Zabbix server '%s' updated by %s", server_name, session.user)
+    except Exception as e:
+        logger.error("Failed to update server: %s", e)
+
+    return RedirectResponse("/servers", status_code=303)
+
+
+async def server_delete(request: Request) -> Response:
+    """Delete a Zabbix server from config.toml."""
+    admin_app = request.app.state.admin_app
+    session = admin_app.require_auth(request)
+    if not session or session.role != "admin":
+        return RedirectResponse("/servers", status_code=303)
+
+    server_name = request.path_params["server_name"]
+    try:
+        remove_config_table(admin_app.config_path, "zabbix", server_name)
+        logger.info("Zabbix server '%s' deleted by %s", server_name, session.user)
+    except Exception as e:
+        logger.error("Failed to delete server: %s", e)
+
+    return RedirectResponse("/servers", status_code=303)
+
+
 async def server_test(request: Request) -> Response:
     """Test connection to a specific Zabbix server (HTMX endpoint)."""
     admin_app = request.app.state.admin_app
@@ -74,4 +187,4 @@ async def server_test(request: Request) -> Response:
         return JSONResponse({
             "status": "error",
             "message": str(e),
-        }, status_code=200)  # 200 so HTMX processes the response
+        }, status_code=200)

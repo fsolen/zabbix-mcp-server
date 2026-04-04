@@ -39,7 +39,7 @@
                 </td>
                 <td>
                     {% for s in token.scopes %}
-                    <span class="badge badge-{{ s }}">{{ s }}</span>
+                    <span class="badge badge-{% if s == '*' %}success{% else %}primary{% endif %}">{% if s == '*' %}* (all){% else %}{{ s }}{% endif %}</span>
                     {% endfor %}
                 </td>
                 <td>

@@ -7,6 +7,40 @@
         <h1 class="page-title">Zabbix Servers</h1>
         <p class="page-subtitle">Configured Zabbix server connections</p>
     </div>
+    <button class="btn btn-primary" onclick="document.getElementById('add-server-form').style.display = document.getElementById('add-server-form').style.display === 'none' ? 'block' : 'none'">&#x2B; Add Server</button>
+</div>
+
+<!-- Add Server Form (hidden by default) -->
+<div id="add-server-form" class="card mb-4" style="display:none; max-width:640px;">
+    <h3 style="margin-top:0;">Add Zabbix Server</h3>
+    <form method="post" action="/servers/create">
+        <div class="form-group">
+            <label class="form-label">Server Name</label>
+            <input type="text" name="name" class="form-input" placeholder="e.g. production, staging" required pattern="[a-zA-Z][a-zA-Z0-9_-]*">
+            <small class="text-muted">Identifier used in MCP tool calls (letters, numbers, dashes)</small>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Zabbix URL</label>
+            <input type="url" name="url" class="form-input" placeholder="https://zabbix.example.com" required>
+        </div>
+        <div class="form-group">
+            <label class="form-label">API Token</label>
+            <input type="text" name="api_token" class="form-input" placeholder="Zabbix API token" required>
+            <small class="text-muted">Create in Zabbix: User settings &rarr; API tokens</small>
+        </div>
+        <div class="form-group" style="display:flex; gap:24px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="read_only" checked> Read-only
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="verify_ssl" checked> Verify SSL
+            </label>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button type="submit" class="btn btn-primary">Add Server</button>
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-server-form').style.display='none'">Cancel</button>
+        </div>
+    </form>
 </div>
 
 {% if servers %}
@@ -51,15 +85,20 @@
         <hr style="border-color: var(--border-color); margin: 12px 0;">
 
         <div class="server-card-footer">
-            <span class="text-sm text-muted">Last checked: Just now</span>
-            <button class="btn btn-ghost btn-sm"
-                    hx-post="/servers/{{ server.name }}/test"
-                    hx-target="#server-status-{{ server.name }}"
-                    hx-swap="innerHTML"
-                    hx-indicator="this">
+            <div class="actions">
+                <a href="/servers/{{ server.name }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+                <button class="btn btn-ghost btn-sm"
+                        hx-post="/servers/{{ server.name }}/test"
+                        hx-target="#server-status-{{ server.name }}"
+                        hx-swap="innerHTML"
+                        hx-indicator="this">
                 <span class="htmx-indicator spinner-sm"></span>
                 Test Connection
             </button>
+                <form method="post" action="/servers/{{ server.name }}/delete" style="display:inline;">
+                    <button class="btn btn-danger btn-sm" onclick="return confirm('Delete server {{ server.name }}?')">Delete</button>
+                </form>
+            </div>
         </div>
     </div>
     {% endfor %}

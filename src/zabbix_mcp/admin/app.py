@@ -76,7 +76,7 @@ class AdminApp:
         from zabbix_mcp.admin.views.dashboard import dashboard
         from zabbix_mcp.admin.views.tokens import token_list, token_create, token_detail, token_revoke, token_delete
         from zabbix_mcp.admin.views.users import user_list, user_create, user_detail, user_delete
-        from zabbix_mcp.admin.views.servers import servers_view, server_test
+        from zabbix_mcp.admin.views.servers import servers_view, server_create, server_edit, server_delete, server_test
         from zabbix_mcp.admin.views.templates import template_list, template_create, template_edit, template_preview, template_delete
         from zabbix_mcp.admin.views.settings import settings_view, settings_update
         from zabbix_mcp.admin.views.audit import audit_view, audit_export
@@ -95,6 +95,9 @@ class AdminApp:
             Route("/users/{username}", user_detail, methods=["GET", "POST"]),
             Route("/users/{username}/delete", user_delete, methods=["POST"]),
             Route("/servers", servers_view),
+            Route("/servers/create", server_create, methods=["POST"]),
+            Route("/servers/{server_name}/edit", server_edit, methods=["GET", "POST"]),
+            Route("/servers/{server_name}/delete", server_delete, methods=["POST"]),
             Route("/servers/{server_name}/test", server_test, methods=["POST"]),
             Route("/templates", template_list),
             Route("/templates/create", template_create, methods=["GET", "POST"]),
