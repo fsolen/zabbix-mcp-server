@@ -732,12 +732,16 @@ do_update() {
         exit 1
     fi
 
-    # Pull latest code if we're in a git repo
-    if [[ -d "$SCRIPT_DIR/.git" ]]; then
+    # Pull latest code if we're in a git repo (skip on re-exec — already pulled)
+    if [[ -d "$SCRIPT_DIR/.git" ]] && [[ -z "${WMCP_REEXEC:-}" ]]; then
         if command -v git &>/dev/null; then
+            local need_reexec=false
             local pull_output
             pull_output=$(git -C "$SCRIPT_DIR" pull --ff-only 2>&1)
             if [[ $? -eq 0 ]]; then
+                if [[ "$pull_output" != *"Already up to date"* ]]; then
+                    need_reexec=true
+                fi
                 ok "Git pull: $pull_output"
             else
                 warn "Fast-forward pull failed (diverged history or local changes)."
@@ -745,10 +749,17 @@ do_update() {
                 if git -C "$SCRIPT_DIR" fetch origin 2>&1 && \
                    git -C "$SCRIPT_DIR" reset --hard origin/main 2>&1; then
                     ok "Repository synced to latest origin/main."
+                    need_reexec=true
                 else
                     warn "Git sync failed — continuing with current local version."
                     warn "To fix manually: cd $SCRIPT_DIR && git fetch origin && git reset --hard origin/main"
                 fi
+            fi
+            # Re-exec with updated script to ensure new code runs new installer
+            if $need_reexec && [[ -z "${WMCP_REEXEC:-}" ]]; then
+                info "Re-executing installer from updated source..."
+                export WMCP_REEXEC=1
+                exec "$SCRIPT_DIR/deploy/install.sh" update
             fi
         else
             warn "git is not installed — skipping pull. Using existing source in $SCRIPT_DIR."
