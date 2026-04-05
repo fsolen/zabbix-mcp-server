@@ -457,15 +457,11 @@ check_permissions() {
 check_health() {
     local port="${1:-$DEFAULT_PORT}"
     local configured_host="${2:-127.0.0.1}"
-    # For curl and display, use 127.0.0.1 (0.0.0.0 binds all interfaces, including localhost)
+    # For curl, always use 127.0.0.1 (0.0.0.0 binds all interfaces, including localhost)
     local curl_host="127.0.0.1"
-    local display_host="$configured_host"
-    if [[ "$display_host" == "0.0.0.0" ]]; then
-        display_host="127.0.0.1"
-    fi
     local url="http://${curl_host}:${port}/health"
 
-    info "Server configured on ${display_host}:${port}"
+    info "Server configured on ${configured_host}:${port}"
 
     if ! command -v curl &>/dev/null; then
         warn "curl is not installed — skipping health check."
@@ -753,9 +749,7 @@ do_install() {
     echo "  5. View logs:        tail -f $LOG_DIR/server.log"
     echo "  6. Health check:     curl http://localhost:$active_port/health"
     echo
-    local display_host="$active_host"
-    if [[ "$display_host" == "0.0.0.0" ]]; then display_host="127.0.0.1"; fi
-    echo "  Endpoints (from config.toml — ${display_host}:${active_port}):"
+    echo "  Endpoints (from config.toml — ${active_host}:${active_port}):"
     echo "    MCP endpoint:   http://localhost:$active_port/mcp"
     echo "    Health check:   http://localhost:$active_port/health"
     echo "    Admin portal:   http://localhost:9090"
