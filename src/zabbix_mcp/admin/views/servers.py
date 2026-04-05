@@ -64,6 +64,7 @@ async def servers_view(request: Request) -> Response:
         status = "unknown"
         version = None
         error_msg = None
+        config_changed = False
         if name in client_manager.server_names:
             try:
                 version = client_manager.get_version(name)
@@ -75,11 +76,16 @@ async def servers_view(request: Request) -> Response:
             # Detect config drift (URL changed etc.)
             if live_config and cfg.get("url") and cfg["url"] != live_config.url:
                 restart_needed = True
+                config_changed = True
+                # Override error — the real issue is config drift, not connection failure
+                if status == "error":
+                    error_msg = None
         else:
             # Server in config but not in live registry
             status = "pending"
             error_msg = "Not loaded — restart required"
             restart_needed = True
+            config_changed = True
 
         servers.append({
             "name": name,
@@ -89,6 +95,7 @@ async def servers_view(request: Request) -> Response:
             "read_only": read_only,
             "verify_ssl": verify_ssl,
             "error": error_msg,
+            "config_changed": config_changed,
         })
 
     # Also check if live has servers not in config (deleted)

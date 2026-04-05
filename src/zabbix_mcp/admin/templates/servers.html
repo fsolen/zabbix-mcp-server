@@ -104,6 +104,9 @@
                 {% if server.verify_ssl %}
                 <span class="badge badge-success">SSL verified</span>
                 {% endif %}
+                {% if server.config_changed %}
+                <span class="badge badge-warning">⚠️ Config changed</span>
+                {% endif %}
             </div>
         </div>
 
@@ -111,7 +114,9 @@
 
         <div class="server-card-meta">
             <span class="status-inline" id="server-status-{{ server.name }}">
-                {% if server.status == "online" %}
+                {% if server.config_changed %}
+                <span class="status-dot status-dot-yellow"></span> Restart required
+                {% elif server.status == "online" %}
                 <span class="status-dot status-dot-green"></span> Connected
                 {% elif server.status == "pending" %}
                 <span class="status-dot status-dot-yellow"></span> Pending restart

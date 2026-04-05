@@ -1590,10 +1590,33 @@ def run_server(
     except Exception as e:
         logger.warning("Failed to load tokens from config: %s", e)
 
-    # Legacy auth_token fallback
+    # Legacy auth_token fallback — also persist to config so it survives token reload
     if config.server.auth_token and token_store.token_count == 0:
         token_store.load_legacy_token(config.server.auth_token)
         logger.info("Using legacy auth_token (migrate to [tokens] for multi-token support)")
+        # Write legacy token to config.toml so it persists across reloads
+        config_path = getattr(config, "_config_path", None)
+        if config_path:
+            try:
+                from zabbix_mcp.admin.config_writer import load_config_document, save_config_document, TOMLKIT_AVAILABLE
+                if TOMLKIT_AVAILABLE:
+                    doc = load_config_document(config_path)
+                    if "tokens" not in doc or "legacy" not in doc.get("tokens", {}):
+                        import tomlkit, hashlib
+                        if "tokens" not in doc:
+                            doc.add("tokens", tomlkit.table(is_super_table=True))
+                        legacy_hash = f"sha256:{hashlib.sha256(config.server.auth_token.encode()).hexdigest()}"
+                        legacy_table = tomlkit.table()
+                        legacy_table["name"] = "Legacy Token"
+                        legacy_table["token_hash"] = legacy_hash
+                        legacy_table["scopes"] = ["*"]
+                        legacy_table["read_only"] = False
+                        legacy_table["is_legacy"] = True
+                        doc["tokens"]["legacy"] = legacy_table
+                        save_config_document(config_path, doc)
+                        logger.info("Legacy auth_token persisted to [tokens.legacy] in config")
+            except Exception as e:
+                logger.warning("Could not persist legacy token to config: %s", e)
 
     # Set up bearer token auth for HTTP transport
     auth_kwargs: dict[str, Any] = {}

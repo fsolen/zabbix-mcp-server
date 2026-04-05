@@ -230,7 +230,8 @@ a:hover {
 
 .nav-menu {
     list-style: none;
-    padding: 8px 0;
+    padding: 0;
+    margin: 0;
     flex: 1;
 }
 
@@ -1800,7 +1801,4 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     color-scheme: light;
 }
 
-/* ---------- Nav menu top spacing fix ---------- */
-.nav-menu {
-    padding-top: 8px;
-}
+/* nav-menu spacing handled in main definition */
