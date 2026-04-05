@@ -1106,16 +1106,36 @@ with open(config_file, 'w') as f:
     local admin_url
     admin_url=$(_format_url "$admin_ip" 9090)
 
+    # Build box with dynamic width based on content
+    local lines=(
+        "  URL:      $admin_url"
+        "  Username: admin"
+        "  Password: $admin_password"
+        ""
+        "  Save this password — it will not be shown again"
+    )
+    local title="Admin Portal Credentials"
+    # Find widest line
+    local max_w=${#title}
+    for line in "${lines[@]}"; do
+        (( ${#line} > max_w )) && max_w=${#line}
+    done
+    local w=$((max_w + 4))  # padding
+    local bar
+    bar=$(printf '═%.0s' $(seq 1 $w))
+    local title_pad=$(( (w - ${#title}) / 2 ))
+    local title_line
+    title_line=$(printf '%*s%s%*s' $title_pad '' "$title" $((w - title_pad - ${#title})) '')
+
     echo
-    echo -e "  \e[1;32m╔══════════════════════════════════════════════════╗\e[0m"
-    echo -e "  \e[1;32m║          Admin Portal Credentials                ║\e[0m"
-    echo -e "  \e[1;32m╠══════════════════════════════════════════════════╣\e[0m"
-    echo -e "  \e[1;32m║\e[0m  URL:      \e[1m$admin_url\e[0m"
-    echo -e "  \e[1;32m║\e[0m  Username: \e[1madmin\e[0m"
-    echo -e "  \e[1;32m║\e[0m  Password: \e[1m$admin_password\e[0m"
-    echo -e "  \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  Save this password — it will not be shown again"
-    echo -e "  \e[1;32m╚══════════════════════════════════════════════════╝\e[0m"
+    echo -e "  \e[1;32m╔${bar}╗\e[0m"
+    echo -e "  \e[1;32m║\e[0m${title_line}\e[1;32m║\e[0m"
+    echo -e "  \e[1;32m╠${bar}╣\e[0m"
+    for line in "${lines[@]}"; do
+        local pad=$((w - ${#line}))
+        echo -e "  \e[1;32m║\e[0m${line}$(printf '%*s' $pad '')\e[1;32m║\e[0m"
+    done
+    echo -e "  \e[1;32m╚${bar}╝\e[0m"
     echo
 }
 
@@ -1242,23 +1262,56 @@ with open(config_file, 'w') as f:
     fi
 
     echo
-    echo -e "  \e[1;32m╔══════════════════════════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "  \e[1;32m║  MCP Token Generated                                                        ║\e[0m"
-    echo -e "  \e[1;32m╠══════════════════════════════════════════════════════════════════════════════╣\e[0m"
-    echo -e "  \e[1;32m║\e[0m                                                                            \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  Name:   $token_name"
-    echo -e "  \e[1;32m║\e[0m                                                                            \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  \e[1;33m▸ TOKEN (use in MCP client — copy this!):\e[0m                                 \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m    \e[1;97m$raw_token\e[0m"
-    echo -e "  \e[1;32m║\e[0m                                                                            \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  \e[0;36m▸ HASH (saved to config.toml — do not share):\e[0m                             \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m    \e[0;90m$token_hash\e[0m"
-    echo -e "  \e[1;32m║\e[0m                                                                            \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  \e[1;31m⚠  Save the TOKEN now — it will NOT be shown again!\e[0m                       \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m                                                                            \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m  MCP client config:                                                        \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m║\e[0m    \"headers\": {\"Authorization\": \"Bearer \e[1;97m<TOKEN>\e[0m\"}                           \e[1;32m║\e[0m"
-    echo -e "  \e[1;32m╚══════════════════════════════════════════════════════════════════════════════╝\e[0m"
+    # Build box with dynamic width
+    local _client_hint="\"headers\": {\"Authorization\": \"Bearer <TOKEN>\"}"
+    local lines=(
+        ""
+        "  Name:   $token_name"
+        ""
+        "  TOKEN (use in MCP client — copy this!):"
+        "    $raw_token"
+        ""
+        "  HASH (saved to config.toml — do not share):"
+        "    $token_hash"
+        ""
+        "  Save the TOKEN now — it will NOT be shown again!"
+        ""
+        "  MCP client config:"
+        "    $_client_hint"
+    )
+    local title="MCP Token Generated"
+    local max_w=${#title}
+    for line in "${lines[@]}"; do
+        (( ${#line} > max_w )) && max_w=${#line}
+    done
+    local w=$((max_w + 4))
+    local bar
+    bar=$(printf '═%.0s' $(seq 1 $w))
+    local title_pad=$(( (w - ${#title}) / 2 ))
+    local title_line
+    title_line=$(printf '%*s%s%*s' $title_pad '' "$title" $((w - title_pad - ${#title})) '')
+
+    echo -e "  \e[1;32m╔${bar}╗\e[0m"
+    echo -e "  \e[1;32m║\e[0m${title_line}\e[1;32m║\e[0m"
+    echo -e "  \e[1;32m╠${bar}╣\e[0m"
+    for line in "${lines[@]}"; do
+        local pad=$((w - ${#line}))
+        # Colorize specific lines
+        if [[ "$line" == *"TOKEN"*"copy"* ]]; then
+            echo -e "  \e[1;32m║\e[0m  \e[1;33m▸ ${line:2}\e[0m$(printf '%*s' $((pad - 2)) '')\e[1;32m║\e[0m"
+        elif [[ "$line" == "    $raw_token" ]]; then
+            echo -e "  \e[1;32m║\e[0m    \e[1;97m${raw_token}\e[0m$(printf '%*s' $((pad - 4)) '')\e[1;32m║\e[0m"
+        elif [[ "$line" == *"HASH"*"config.toml"* ]]; then
+            echo -e "  \e[1;32m║\e[0m  \e[0;36m▸ ${line:2}\e[0m$(printf '%*s' $((pad - 2)) '')\e[1;32m║\e[0m"
+        elif [[ "$line" == "    $token_hash" ]]; then
+            echo -e "  \e[1;32m║\e[0m    \e[0;90m${token_hash}\e[0m$(printf '%*s' $((pad - 4)) '')\e[1;32m║\e[0m"
+        elif [[ "$line" == *"Save the TOKEN"* ]]; then
+            echo -e "  \e[1;32m║\e[0m  \e[1;31m⚠  ${line:2}\e[0m$(printf '%*s' $((pad - 3)) '')\e[1;32m║\e[0m"
+        else
+            echo -e "  \e[1;32m║\e[0m${line}$(printf '%*s' $pad '')\e[1;32m║\e[0m"
+        fi
+    done
+    echo -e "  \e[1;32m╚${bar}╝\e[0m"
     echo
 
     if command -v systemctl &>/dev/null && systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
