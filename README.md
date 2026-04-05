@@ -569,9 +569,21 @@ HTTP transport, with token:
 }
 ```
 
+##### OpenAI Codex — examples
+
+Add to `codex.json` or configure via Codex CLI:
+
+```bash
+# HTTP transport, no token
+codex --mcp-server http://your-server:8080/mcp
+
+# HTTP transport, with token
+codex --mcp-server http://your-server:8080/mcp --mcp-header "Authorization: Bearer zmcp_your-token-here"
+```
+
 ##### Other clients
 
-Cursor, JetBrains IDEs, OpenAI Codex, ChatGPT — use the same URL and optional `Authorization` header in their respective MCP server settings.
+Cursor, JetBrains IDEs, ChatGPT — use the same URL and optional `Authorization` header in their respective MCP server settings.
 
 ## Example Prompts
 
