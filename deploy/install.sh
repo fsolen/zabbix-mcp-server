@@ -129,6 +129,7 @@ Commands:
   update              Update existing installation, preserve config
   uninstall           Complete removal of the server and all its data
   set-admin-password  Reset the admin portal password
+  generate-token      Generate a new MCP bearer token and add it to config.toml
 
 Options:
   --dry-run           Check prerequisites without installing anything
@@ -143,6 +144,7 @@ Examples:
   sudo ./deploy/install.sh update                # update (keeps reporting if installed)
   sudo ./deploy/install.sh update --with-reporting  # update + add PDF reports
   sudo ./deploy/install.sh uninstall             # complete removal
+  sudo ./deploy/install.sh generate-token claude  # generate MCP bearer token
   sudo ./deploy/install.sh --dry-run             # verify prerequisites
 
 What it does:
@@ -1099,6 +1101,109 @@ TOKEN
     fi
 }
 
+do_generate_token() {
+    info "=== Zabbix MCP Server - Generate MCP Token ==="
+    echo
+
+    if [[ ! -d "$INSTALL_DIR/venv" ]]; then
+        error "No installation found at $INSTALL_DIR"
+        exit 1
+    fi
+
+    local config_file="$CONFIG_DIR/config.toml"
+    local token_name=""
+
+    # Accept name as argument or prompt
+    if [[ -n "${1:-}" ]]; then
+        token_name="$1"
+    elif [[ -t 0 ]]; then
+        read -rp "$(echo -e '\e[1;34m>>>\e[0m') Token name (e.g. claude, ci_pipeline): " token_name
+    fi
+
+    if [[ -z "$token_name" ]]; then
+        error "Token name is required."
+        echo "Usage: sudo ./deploy/install.sh generate-token <name>"
+        exit 1
+    fi
+
+    # Sanitize name for TOML key
+    local token_id
+    token_id=$(echo "$token_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g' | cut -c1-50)
+    if [[ ! "$token_id" =~ ^[a-z] ]]; then
+        token_id="t_${token_id}"
+    fi
+
+    # Generate token + hash using Python
+    local result
+    result=$("$INSTALL_DIR/venv/bin/python" -c "
+import secrets, hashlib
+raw = 'zmcp_' + secrets.token_hex(32)
+hash_str = 'sha256:' + hashlib.sha256(raw.encode()).hexdigest()
+print(raw)
+print(hash_str)
+")
+    local raw_token
+    raw_token=$(echo "$result" | head -1)
+    local token_hash
+    token_hash=$(echo "$result" | tail -1)
+
+    # Write to config.toml if it exists
+    if [[ -f "$config_file" ]]; then
+        # Check for collision
+        if grep -q "^\[tokens\.${token_id}\]" "$config_file" 2>/dev/null; then
+            error "Token '${token_id}' already exists in config.toml"
+            exit 1
+        fi
+
+        "$INSTALL_DIR/venv/bin/python" -c "
+import sys
+config_file = sys.argv[1]
+token_id = sys.argv[2]
+token_hash = sys.argv[3]
+token_name = sys.argv[4]
+from datetime import datetime, timezone
+created = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+with open(config_file, 'r') as f:
+    content = f.read()
+
+content += '''
+[tokens.''' + token_id + ''']
+name = \"''' + token_name + '''\"
+token_hash = \"''' + token_hash + '''\"
+scopes = [\"*\"]
+read_only = true
+created_at = \"''' + created + '''\"
+'''
+
+with open(config_file, 'w') as f:
+    f.write(content)
+" "$config_file" "$token_id" "$token_hash" "$token_name"
+
+        ok "Token written to $config_file as [tokens.${token_id}]"
+    fi
+
+    echo
+    echo -e "  \e[1;32m╔══════════════════════════════════════════════════════════════════════════╗\e[0m"
+    echo -e "  \e[1;32m║  MCP Token Generated                                                    ║\e[0m"
+    echo -e "  \e[1;32m╠══════════════════════════════════════════════════════════════════════════╣\e[0m"
+    echo -e "  \e[1;32m║\e[0m  Name:  $token_name"
+    echo -e "  \e[1;32m║\e[0m  Token: \e[1m$raw_token\e[0m"
+    echo -e "  \e[1;32m║\e[0m  Hash:  $token_hash"
+    echo -e "  \e[1;32m║\e[0m"
+    echo -e "  \e[1;32m║\e[0m  Save the token above — it will not be shown again."
+    echo -e "  \e[1;32m║\e[0m  The hash has been written to config.toml."
+    echo -e "  \e[1;32m║\e[0m"
+    echo -e "  \e[1;32m║\e[0m  Use in MCP client config:"
+    echo -e "  \e[1;32m║\e[0m    \"headers\": {\"Authorization\": \"Bearer $raw_token\"}"
+    echo -e "  \e[1;32m╚══════════════════════════════════════════════════════════════════════════╝\e[0m"
+    echo
+
+    if command -v systemctl &>/dev/null && systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        warn "Restart the service to apply: sudo systemctl restart $SERVICE_NAME"
+    fi
+}
+
 do_set_admin_password() {
     info "=== Zabbix MCP Server - Set Admin Password ==="
     echo
@@ -1198,7 +1303,7 @@ for arg in "$@"; do
         --without-reporting)
             INSTALL_REPORTING=false
             ;;
-        install|update|upgrade|uninstall|set-admin-password)
+        install|update|upgrade|uninstall|set-admin-password|generate-token)
             COMMAND="$arg"
             ;;
         *)
@@ -1230,6 +1335,9 @@ case "$COMMAND" in
         ;;
     set-admin-password)
         do_set_admin_password
+        ;;
+    generate-token)
+        do_generate_token "${ORIGINAL_ARGS[@]:1}"
         ;;
     install)
         do_install

@@ -122,6 +122,7 @@ sudo ./deploy/install.sh [COMMAND] [OPTIONS]
 | `uninstall` | Complete removal — service, config, logs, virtualenv, system user |
 | `--dry-run` | Check prerequisites without installing |
 | `set-admin-password` | Reset admin portal password |
+| `generate-token <name>` | Generate a new MCP bearer token and add it to config.toml |
 | `--install-python` | Auto-install Python 3.12 if no suitable version found |
 | `--with-reporting` | Install PDF reporting dependencies (default on fresh install) |
 | `--without-reporting` | Skip PDF reporting dependencies |
@@ -331,6 +332,58 @@ sudo ./deploy/install.sh set-admin-password
 - All config.toml settings editable via UI
 - Audit log viewer with CSV export
 - Dark/light mode with auto-detection
+
+### MCP Token Management
+
+Tokens authenticate MCP clients (Claude, Cursor, etc.) to the server. There are three ways to manage them:
+
+**Option A: Installer command (recommended)**
+
+```bash
+sudo ./deploy/install.sh generate-token claude
+```
+
+This generates a random token, writes the hash to `config.toml`, and displays the raw token once. Restart the service to apply.
+
+**Option B: Admin portal**
+
+Open `http://localhost:9090/` → MCP Tokens → Create Token. The portal generates the token and shows it once.
+
+**Option C: Manual (no install required)**
+
+Generate a token and its hash:
+
+```bash
+python3 -c "import secrets,hashlib; t='zmcp_'+secrets.token_hex(32); print(f'Token: {t}\nHash:  sha256:{hashlib.sha256(t.encode()).hexdigest()}')"
+```
+
+Then add to `config.toml`:
+
+```toml
+[tokens.my_client]
+name = "My MCP Client"
+token_hash = "sha256:<paste hash here>"
+scopes = ["*"]          # or specific groups: ["monitoring", "alerts"]
+read_only = true
+```
+
+Use the token in your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "zabbix": {
+      "type": "http",
+      "url": "http://your-server:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer zmcp_<paste token here>"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Tokens are optional. Without any `auth_token` or `[tokens.*]` sections, the server accepts unauthenticated connections (suitable for localhost-only deployments).
 
 ### Health monitoring
 

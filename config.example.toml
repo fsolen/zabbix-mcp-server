@@ -300,6 +300,14 @@ port = 9090
 #
 # When no [tokens.*] sections exist, the legacy auth_token above is used.
 # When [tokens.*] sections exist, they take precedence over auth_token.
+#
+# Generate a token using the installer:
+#   sudo ./deploy/install.sh generate-token <name>
+#
+# Or generate manually (no install required):
+#   python3 -c "import secrets,hashlib; t='zmcp_'+secrets.token_hex(32); print(f'Token: {t}\nHash:  sha256:{hashlib.sha256(t.encode()).hexdigest()}')"
+#   Then paste the hash below and use the token in your MCP client config:
+#   "headers": {"Authorization": "Bearer zmcp_..."}
 
 # [tokens.example]
 # name = "My MCP Client"
@@ -307,6 +315,7 @@ port = 9090
 # scopes = ["*"]                   # Tool groups: monitoring, data_collection, alerts, users, administration, or * for all
 # read_only = true
 # allowed_ips = ["10.0.0.0/24"]   # Optional IP/CIDR whitelist
+# allowed_servers = ["*"]          # Optional: restrict to specific Zabbix servers
 # expires_at = "2026-12-31T23:59:59Z"  # Optional expiry (ISO 8601)
 
 # ---------------------------------------------------------------------------
