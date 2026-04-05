@@ -1,25 +1,48 @@
 # Changelog
 
-## v1.16 — 2026-04-04
+## v1.16 — 2026-04-05
 
 ### Added
 
-- **Graph image export** — new `graph_render` tool fetches rendered Zabbix graph PNGs from the frontend and returns them as base64 data URIs; multimodal AI models can display and interpret the graphs directly; supports Bearer token and session cookie authentication
-- **PDF report generator** — new `report_generate` tool creates professional PDF reports from Zabbix data; 4 report types: `availability` (SLA gauge + uptime per host), `capacity_host` (CPU/memory/disk usage), `capacity_network` (bandwidth/traffic per interface), `backup` (daily success/fail matrix); configurable company logo and branding via `report_logo`, `report_company`, `report_subtitle` config options; requires optional `weasyprint` + `jinja2` dependencies (`pip install zabbix-mcp-server[reporting]`)
-- **Anomaly detection** — new `anomaly_detect` tool performs z-score analysis on trend data across a host group; identifies hosts whose metric values deviate significantly from the group average; configurable threshold and analysis period
-- **Capacity forecast** — new `capacity_forecast` tool uses linear regression on historical trend data to predict when a metric will reach a threshold; returns predicted date, daily growth rate, and R-squared confidence; useful for disk/CPU/memory capacity planning
-- **MCP Resources** — Zabbix data exposed as browsable MCP resources (`zabbix://{server}/hosts`, `/problems`, `/hostgroups`, `/templates`); MCP clients can browse Zabbix like a filesystem
-- **Action approval flow** — new `action_prepare` + `action_confirm` two-step pattern for write operations; `action_prepare` returns a preview and confirmation token (expires in 5 minutes); `action_confirm` executes the action only with a valid token; provides a safety layer for destructive operations
-- **Startup success banner** — clear `#### Zabbix MCP Server started successfully ####` log message after all initialization is complete; initMAX branding in startup log
-- **Installer `set-admin-password` command** — interactive admin password reset: `sudo ./deploy/install.sh set-admin-password`
+- **Admin web portal** — full-featured web administration interface on a separate port (default: 9090); initMAX-branded design with dark/light/auto mode, Rubik font, sidebar navigation; manages tokens, users, servers, templates, settings, audit log; all changes written back to config.toml (preserves comments via tomlkit)
+- **Multi-token MCP authentication** — replace single `auth_token` with multiple named tokens (`[tokens.*]` in config.toml), each with independent scopes (tool group filtering), read-only flag, IP restrictions, and expiry; tokens stored as SHA-256 hashes; legacy `auth_token` automatically migrated and persisted
+- **Admin user management** — multiple admin portal users with role-based access control: admin (full access), operator (manage tokens and templates), viewer (read-only); passwords hashed with scrypt; own password change requires current password + confirmation
+- **Graph image export** — new `graph_render` tool fetches rendered Zabbix graph PNGs from the frontend as base64 data URIs; multimodal AI models can display and interpret graphs directly
+- **PDF report generator** — new `report_generate` tool creates professional PDF reports; 4 built-in templates (availability, capacity_host, capacity_network, backup); custom templates via admin portal; configurable logo and branding
+- **Visual template editor** — GrapesJS drag & drop builder with custom Zabbix blocks (Header, Title, Info Table, Host Table, SLA Gauge, Graph); dual mode: Visual (drag & drop) and HTML (raw code); server-side Jinja2 preview with sample data and initMAX logo fallback
+- **Anomaly detection** — new `anomaly_detect` tool performs z-score analysis on trend data across a host group
+- **Capacity forecast** — new `capacity_forecast` tool uses linear regression to predict when a metric reaches a threshold
+- **MCP Resources** — Zabbix data as browsable resources (`zabbix://{server}/hosts`, `/problems`, `/hostgroups`, `/templates`)
+- **Action approval flow** — `action_prepare` + `action_confirm` two-step pattern for write operations with 5-minute confirmation tokens
+- **Tool exposure UI** — chip/box interface for enabling/disabling tool groups globally and per-token; hover tooltips with descriptions; search filtering; globally disabled tools locked in token scopes with ⚠️ warning
+- **File upload** — upload report logo (`/etc/zabbix-mcp/assets/`) and TLS certificates (`/etc/zabbix-mcp/tls/`) via admin portal with validation
+- **Flatpickr date picker** — custom dark/light themed date picker replacing native browser date inputs
+- **Custom number inputs** — +/- button controls for port and rate limit fields
+- **Audit logging** — all admin actions (token/user/server CRUD, login, logout, settings changes) logged to `/var/log/zabbix-mcp/audit.log` (JSON lines); viewer with search, date filters, CSV export
+- **Admin health check** — `GET /health` on admin port returns `{"status":"ok","portal":"admin","version":"1.16"}`
+- **Server config drift detection** — server cards show ⚠️ "Config changed" badge when config differs from live state; restart banner with "Restart Now" button
+- **Custom confirm modals** — all destructive actions use styled modals with blur overlay instead of native browser confirm; restart modal includes progress bar
+- **Startup branding** — `Zabbix MCP Server v1.16 — developed by initMAX s.r.o.` in startup log
+
+### Security
+
+- **SandboxedEnvironment for template preview** — prevents SSTI/RCE via Jinja2 template injection in user-uploaded templates
+- **Settings key allowlist** — per-section allowlists prevent arbitrary config key injection via settings forms
+- **Operator role restricted** — operators cannot modify admin config section or manage Zabbix server connections
+- **HTML escaping** — all dynamic content in HTMLResponse f-strings escaped via `html.escape()`
+- **Symlink check fixed** — logo reader checks `is_symlink()` before `resolve()` (prevents TOCTOU bypass)
+- **Session cookie secure flag** — `secure=True` set when served over HTTPS
+- **Token revoke blocks MCP** — revoked tokens immediately rejected by MCP authentication
+- **TLS key upload** — saved with `0600` permissions; TLS directory `0750`
 
 ### Fixed
 
-- **Installer did not upgrade package on update** — `pip install` without `--upgrade` skipped re-installation when the package name was unchanged; version upgrades (e.g. 1.14→1.16) silently kept the old version
-- **Admin web portal** — full-featured web administration interface on a separate port (default: 9090); initMAX-branded design with dark/light mode (auto-detect + manual toggle), Rubik font, sidebar navigation; pages: dashboard (server status, token stats, audit feed), MCP token management (CRUD with scope picker, IP restrictions, expiry), admin user management (admin/operator/viewer roles), Zabbix server status (connection test), report template editor (split-view HTML editor with live preview), settings (all config.toml sections editable), audit log viewer with CSV export
-- **Multi-token MCP authentication** — replace single `auth_token` with multiple named tokens, each with independent scopes (tool group filtering), read-only flag, IP whitelist, and expiry; tokens stored as SHA-256 hashes in config.toml `[tokens.*]` sections; legacy `auth_token` automatically migrated; managed via admin portal or manual config edit
-- **Admin user management** — multiple admin portal users with role-based access control: admin (full access), operator (manage tokens and templates), viewer (read-only dashboard); passwords hashed with scrypt
-- **Config.toml write-back** — admin portal writes changes back to config.toml atomically (temp file + rename) via tomlkit (preserves comments and formatting); SIGHUP hot-reload for non-restart settings
+- **Installer pip upgrade** — `pip install --upgrade` ensures version upgrades actually install new code
+- **Installer git diverged history** — `git fetch + reset --hard` with self-re-exec after source update
+- **Legacy token persistence** — migrated `auth_token` written to `[tokens.legacy]` in config.toml so it survives admin portal token reloads
+- **Config writer Docker support** — fallback to direct write when atomic rename fails on Docker bind mounts
+- **Explicit group creation** — `groupadd --system` before `useradd` (fixes openSUSE)
+- **Container-safe installer** — graceful skip when systemd/logrotate not present
 
 ## v1.15 — 2026-04-04
 
