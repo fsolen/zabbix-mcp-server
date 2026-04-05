@@ -192,23 +192,26 @@
         <input type="hidden" name="disabled_tools" id="disabled-tools-input" value="{{ settings.disabled_tools | join(',') if settings.disabled_tools else '' }}">
 
         <div class="form-hint" style="margin-bottom:12px;">
-            &#x26A0;&#xFE0F; Disabled tools are hidden from <strong>all</strong> MCP tokens globally.
+            &#x26A0;&#xFE0F; Disabled tools are hidden from <strong>all</strong> MCP tokens globally. Drag bubbles between Allowed and Disabled, or click to toggle.
         </div>
 
         <input type="text" class="form-input" placeholder="Search tools and groups..."
-               oninput="filterTools(this.value)" style="margin-bottom:16px;">
+               oninput="filterToolBubbles(this.value)" style="margin-bottom:16px;" id="tool-search">
 
-        <div id="tools-container">
-            <!-- Allowed -->
-            <h3 style="color:var(--color-success); margin-bottom:8px;">&#x2705; Allowed</h3>
-            <div id="allowed-tools" class="tool-chips">
-                <!-- chips rendered by JS -->
+        <div class="tool-zones">
+            <div class="tool-zone tool-zone-allowed" id="zone-allowed"
+                 ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="dropTool(event, 'allowed'); this.classList.remove('drag-over')">
+                <div class="tool-zone-header">&#x2705; Allowed</div>
+                <div class="tool-zone-bubbles" id="allowed-bubbles"></div>
             </div>
-
-            <!-- Disabled -->
-            <h3 style="color:var(--color-danger); margin-top:16px; margin-bottom:8px;">&#x274C; Disabled</h3>
-            <div id="disabled-tools" class="tool-chips">
-                <!-- chips rendered by JS -->
+            <div class="tool-zone tool-zone-disabled" id="zone-disabled"
+                 ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="dropTool(event, 'disabled'); this.classList.remove('drag-over')">
+                <div class="tool-zone-header">&#x274C; Disabled</div>
+                <div class="tool-zone-bubbles" id="disabled-bubbles"></div>
             </div>
         </div>
 
@@ -312,121 +315,83 @@
 
 {% block scripts %}
 <script>
-var TOOL_GROUPS = {
-    "monitoring": {
-        description: "Hosts, problems, triggers, items, events, history, trends, SLA, dashboards, maps",
-        tools: ["host", "hostgroup", "hostinterface", "hostprototype",
-                "item", "itemprototype", "trigger", "triggerprototype",
-                "problem", "event", "history", "trend",
-                "graph", "graphitem", "graphprototype",
-                "discoveryrule", "discoveryruleprototype",
-                "dcheck", "dhost", "drule", "dservice", "httptest", "sla"]
-    },
-    "data_collection": {
-        description: "Templates, template groups, template dashboards, value maps, dashboards",
-        tools: ["template", "templategroup", "templatedashboard",
-                "valuemap", "dashboard"]
-    },
-    "alerts": {
-        description: "Actions, media types, alert history, script execution",
-        tools: ["action", "alert", "mediatype", "script"]
-    },
-    "users": {
-        description: "Users, user groups, user directories, macros, tokens, roles, MFA",
-        tools: ["user", "usergroup", "userdirectory", "usermacro",
-                "token", "role", "mfa"]
-    },
-    "administration": {
-        description: "Settings, housekeeping, authentication, autoregistration, configuration, connectors, proxies, modules",
-        tools: ["settings", "housekeeping", "authentication", "autoregistration",
-                "configuration", "connector", "correlation", "hanode",
-                "iconmap", "image", "maintenance", "map", "module",
-                "proxy", "proxygroup", "regexp", "report", "task",
-                "auditlog"]
-    }
-};
+// Tool Groups data
+var TOOL_DATA = [
+    {name: "monitoring", type: "group", desc: "Hosts, problems, triggers, items, events, history, trends, SLA, dashboards, maps"},
+    {name: "data_collection", type: "group", desc: "Templates, template groups, dashboards, value maps, configuration"},
+    {name: "alerts", type: "group", desc: "Actions, media types, alert history, script execution"},
+    {name: "users", type: "group", desc: "Users, user groups, roles, tokens, authentication"},
+    {name: "administration", type: "group", desc: "Settings, proxies, housekeeping, audit log, connectors, modules"},
+];
 
-var disabledTools = (document.getElementById('disabled-tools-input').value || '').split(',').filter(Boolean);
+var disabledList = (document.getElementById('disabled-tools-input').value || '').split(',').filter(Boolean);
 
-function isDisabled(name) {
-    return disabledTools.indexOf(name) !== -1;
+function makeBubble(item) {
+    var el = document.createElement('span');
+    el.className = 'tool-bubble' + (item.type === 'group' ? ' tool-bubble-group' : ' tool-bubble-tool');
+    el.textContent = item.name.replace(/_/g, ' ');
+    el.title = item.desc || item.name;
+    el.draggable = true;
+    el.dataset.name = item.name;
+    el.dataset.type = item.type;
+    el.ondragstart = function(e) {
+        e.dataTransfer.setData('text/plain', item.name);
+        el.classList.add('dragging');
+    };
+    el.ondragend = function() { el.classList.remove('dragging'); };
+    el.onclick = function() { toggleBubble(item.name); };
+    return el;
 }
 
-function toggleTool(name, isGroup) {
-    if (isGroup) {
-        var group = TOOL_GROUPS[name];
-        if (isDisabled(name)) {
-            // Enable group + all its tools
-            disabledTools = disabledTools.filter(function(t) {
-                return t !== name && (!group || group.tools.indexOf(t) === -1);
-            });
-        } else {
-            // Disable group + all its tools
-            if (disabledTools.indexOf(name) === -1) disabledTools.push(name);
-            group.tools.forEach(function(tool) {
-                if (disabledTools.indexOf(tool) === -1) disabledTools.push(tool);
-            });
-        }
-    } else {
-        if (isDisabled(name)) {
-            disabledTools = disabledTools.filter(function(t) { return t !== name; });
-        } else {
-            disabledTools.push(name);
-        }
-    }
-    document.getElementById('disabled-tools-input').value = disabledTools.join(',');
-    renderTools();
+function toggleBubble(name) {
+    var idx = disabledList.indexOf(name);
+    if (idx !== -1) { disabledList.splice(idx, 1); }
+    else { disabledList.push(name); }
+    syncState();
 }
 
-function renderTools() {
-    var allowedEl = document.getElementById('allowed-tools');
-    var disabledEl = document.getElementById('disabled-tools');
-    var allowedHTML = '';
-    var disabledHTML = '';
-
-    for (var group in TOOL_GROUPS) {
-        var info = TOOL_GROUPS[group];
-        var groupDisabled = isDisabled(group);
-        var icon = groupDisabled ? '\u2705' : '\u274C';
-        var chip = '<span class="tool-chip tool-chip-group' + (groupDisabled ? ' disabled' : '') + '" ' +
-                   'title="' + info.description + '" onclick="toggleTool(\'' + group + '\', true)">' +
-                   group.replace(/_/g, ' ') +
-                   '<span class="chip-toggle">' + icon + '</span></span>';
-
-        if (groupDisabled) {
-            disabledHTML += chip;
-        } else {
-            allowedHTML += chip;
-        }
-
-        // Render individual tool chips under the group
-        info.tools.forEach(function(tool) {
-            var toolDisabled = isDisabled(tool) || groupDisabled;
-            var toolIcon = toolDisabled ? '\u2705' : '\u274C';
-            var toolChip = '<span class="tool-chip tool-chip-tool' + (toolDisabled ? ' disabled' : '') + '" ' +
-                           'title="' + tool + ' (group: ' + group + ')" ' +
-                           'onclick="toggleTool(\'' + tool + '\', false)">' +
-                           tool +
-                           '<span class="chip-toggle">' + toolIcon + '</span></span>';
-            if (toolDisabled) {
-                disabledHTML += toolChip;
-            } else {
-                allowedHTML += toolChip;
-            }
-        });
-    }
-
-    allowedEl.innerHTML = allowedHTML || '<span class="text-muted">No allowed tools</span>';
-    disabledEl.innerHTML = disabledHTML || '<span class="text-muted">No disabled tools</span>';
+function dropTool(e, zone) {
+    e.preventDefault();
+    var name = e.dataTransfer.getData('text/plain');
+    if (!name) return;
+    var idx = disabledList.indexOf(name);
+    if (zone === 'disabled' && idx === -1) { disabledList.push(name); }
+    else if (zone === 'allowed' && idx !== -1) { disabledList.splice(idx, 1); }
+    syncState();
 }
 
-function filterTools(query) {
-    query = query.toLowerCase();
-    document.querySelectorAll('.tool-chip').forEach(function(chip) {
-        chip.style.display = chip.textContent.toLowerCase().indexOf(query) !== -1 ? '' : 'none';
+function syncState() {
+    document.getElementById('disabled-tools-input').value = disabledList.join(',');
+    renderBubbles();
+}
+
+function renderBubbles() {
+    var allowedEl = document.getElementById('allowed-bubbles');
+    var disabledEl = document.getElementById('disabled-bubbles');
+    allowedEl.innerHTML = '';
+    disabledEl.innerHTML = '';
+
+    TOOL_DATA.forEach(function(item) {
+        var bubble = makeBubble(item);
+        if (disabledList.indexOf(item.name) !== -1) {
+            bubble.classList.add('disabled');
+            disabledEl.appendChild(bubble);
+        } else {
+            allowedEl.appendChild(bubble);
+        }
+    });
+
+    if (!allowedEl.children.length) allowedEl.innerHTML = '<span class="text-muted" style="padding:12px;">All tools disabled</span>';
+    if (!disabledEl.children.length) disabledEl.innerHTML = '<span class="text-muted" style="padding:12px;">No tools disabled</span>';
+}
+
+function filterToolBubbles(q) {
+    q = q.toLowerCase();
+    document.querySelectorAll('.tool-bubble').forEach(function(b) {
+        b.style.display = b.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
     });
 }
 
-renderTools();
+renderBubbles();
 </script>
 {% endblock %}
