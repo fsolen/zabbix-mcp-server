@@ -408,35 +408,170 @@ The server uses the **Streamable HTTP** transport by default and listens on `htt
 
 **[MCP](https://modelcontextprotocol.io)** (Model Context Protocol) is an open standard that lets AI assistants use external tools. Any MCP-compatible client can connect to this server - ChatGPT, VS Code, Claude, Codex, JetBrains, and others.
 
-The MCP client configuration is the same for all clients:
+To connect an MCP client to the server, you need 3 things from your server configuration:
+
+#### Step 1: Find your server settings
+
+Check your **admin portal** (Settings → MCP Server) or **config.toml** for 3 values — transport, address, and token:
+
+<table>
+<tr>
+<td><img src="docs/admin-transport.png" alt="Transport setting in admin portal" width="350"></td>
+<td>
+
+```toml
+[server]
+transport = "http"
+host = "0.0.0.0"
+port = 8888
+auth_token = "XXXXXXXXXXXXX"
+```
+
+</td>
+</tr>
+</table>
+
+- **Transport** → determines the client URL path and the `"type"` field in client config:
+
+  | Your transport | Client `"type"` | Client URL |
+  |---|---|---|
+  | **HTTP** (Streamable HTTP — recommended) | `"type": "http"` | `http://your-server:port/mcp` |
+  | **SSE** (Server-Sent Events) | `"type": "sse"` | `http://your-server:port/sse` |
+  | **STDIO** (subprocess mode) | *(not applicable)* | *(no URL — client launches server locally)* |
+
+- **Host + Port** → your server's IP address and port (e.g. `10.0.0.5:8888`). If `host` is `0.0.0.0`, use your server's actual IP.
+
+#### Step 2: Check if token authentication is required
+
+If `auth_token` exists in your config.toml or you see tokens in the admin portal (MCP Tokens page), clients must include the token in the `Authorization` header. If no tokens are configured, skip this step — no header needed.
+
+<table>
+<tr>
+<td>
+
+```toml
+[server]
+transport = "http"
+host = "0.0.0.0"
+port = 8888
+auth_token = "XXXXXXXXXXXXX"
+```
+
+</td>
+<td><img src="docs/admin-tokens.png" alt="MCP Tokens in admin portal" width="400"></td>
+</tr>
+</table>
+
+> **Optional:** You can generate new tokens via `sudo ./deploy/install.sh generate-token <name>` or in admin portal → MCP Tokens → Create Token. The token value is shown only once at creation. The `auth_token` value from config.toml can also be used directly.
+
+#### Step 3: Configure your AI client
+
+##### Claude Code (CLI) — examples
+
+```bash
+# HTTP transport, no token
+claude mcp add zabbix -t http -e http://your-server:8080/mcp
+
+# HTTP transport, with token
+claude mcp add zabbix -t http -e http://your-server:8080/mcp -h "Authorization: Bearer zmcp_your-token-here"
+
+# SSE transport, no token
+claude mcp add zabbix -t sse -e http://your-server:8080/sse
+
+# SSE transport, with token
+claude mcp add zabbix -t sse -e http://your-server:8080/sse -h "Authorization: Bearer zmcp_your-token-here"
+
+# STDIO transport (local subprocess)
+claude mcp add zabbix -t command -- /opt/zabbix-mcp/venv/bin/zabbix-mcp-server --config /etc/zabbix-mcp/config.toml
+```
+
+##### Claude Desktop — examples
+
+Config file location:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+HTTP transport, no token:
 
 ```json
 {
   "mcpServers": {
     "zabbix": {
+      "type": "http",
       "url": "http://your-server:8080/mcp"
     }
   }
 }
 ```
 
-Where to put this config depends on the client. **Claude Code is recommended** — it handles large tool sets (231 tools) without issues, unlike some clients that struggle with high tool counts.
+HTTP transport, with token:
 
-| Client | Config location | Free tier |
-|---|---|---|
-| **Claude Code** (recommended) | `.mcp.json` in project root or `~/.claude/settings.json` for global | — |
-| **OpenAI Codex** (recommended) | MCP server settings in the Codex configuration | — |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows) | Yes |
-| VS Code + GitHub Copilot | `.vscode/mcp.json` in workspace | Yes |
-| ChatGPT (initMAX widget) | MCP server settings in the widget configuration | — |
-| Cursor | MCP server settings in Cursor IDE | Yes |
-| JetBrains IDEs | MCP server settings in the IDE | — |
-
-When `auth_token` is configured on the server, clients must include the bearer token in requests:
-
+```json
+{
+  "mcpServers": {
+    "zabbix": {
+      "type": "http",
+      "url": "http://your-server:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer zmcp_your-token-here"
+      }
+    }
+  }
+}
 ```
-Authorization: Bearer your-secret-token-here
+
+SSE transport, with token:
+
+```json
+{
+  "mcpServers": {
+    "zabbix": {
+      "type": "sse",
+      "url": "http://your-server:8080/sse",
+      "headers": {
+        "Authorization": "Bearer zmcp_your-token-here"
+      }
+    }
+  }
+}
 ```
+
+##### VS Code + GitHub Copilot — examples
+
+Add `.vscode/mcp.json` to your workspace:
+
+HTTP transport, no token:
+
+```json
+{
+  "servers": {
+    "zabbix": {
+      "type": "http",
+      "url": "http://your-server:8080/mcp"
+    }
+  }
+}
+```
+
+HTTP transport, with token:
+
+```json
+{
+  "servers": {
+    "zabbix": {
+      "type": "http",
+      "url": "http://your-server:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer zmcp_your-token-here"
+      }
+    }
+  }
+}
+```
+
+##### Other clients
+
+Cursor, JetBrains IDEs, OpenAI Codex, ChatGPT — use the same URL and optional `Authorization` header in their respective MCP server settings.
 
 ## Example Prompts
 
