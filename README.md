@@ -316,9 +316,16 @@ sudo journalctl -u zabbix-mcp-server -f
 
 Web-based administration portal for managing MCP tokens, users, report templates, and server settings. Runs on a **separate port** (default: 9090) — the MCP port (8080) serves only the MCP protocol, no admin UI.
 
-<p align="center">
-  <img src="docs/admin-login.png" alt="Admin Portal Login" width="600">
-</p>
+<table>
+<tr>
+<td><img src="docs/admin-login.png" alt="Login — Dark" width="400"></td>
+<td><img src="docs/admin-login-light.png" alt="Login — Light" width="400"></td>
+</tr>
+<tr>
+<td><img src="docs/admin-dashboard.png" alt="Dashboard — Dark" width="400"></td>
+<td><img src="docs/admin-dashboard-light.png" alt="Dashboard — Light" width="400"></td>
+</tr>
+</table>
 
 ```toml
 [admin]
@@ -327,10 +334,6 @@ port = 9090
 ```
 
 The installer generates an admin password automatically. To reset: `sudo ./deploy/install.sh set-admin-password`
-
-<p align="center">
-  <img src="docs/admin-dashboard.png" alt="Admin Portal Dashboard" width="800">
-</p>
 
 **Features:**
 
