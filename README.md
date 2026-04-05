@@ -571,14 +571,23 @@ HTTP transport, with token:
 
 ##### OpenAI Codex — examples
 
-Add to `codex.json` or configure via Codex CLI:
+Via CLI:
 
 ```bash
 # HTTP transport, no token
-codex --mcp-server http://your-server:8080/mcp
+codex mcp add zabbix --url http://your-server:8080/mcp
 
-# HTTP transport, with token
-codex --mcp-server http://your-server:8080/mcp --mcp-header "Authorization: Bearer zmcp_your-token-here"
+# HTTP transport, with token (reads token from environment variable)
+export ZABBIX_MCP_TOKEN="zmcp_your-token-here"
+codex mcp add zabbix --url http://your-server:8080/mcp --bearer-token-env-var ZABBIX_MCP_TOKEN
+```
+
+Or add directly to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.zabbix]
+url = "http://your-server:8080/mcp"
+bearer_token_env_var = "ZABBIX_MCP_TOKEN"  # optional — remove if no token
 ```
 
 ##### Other clients
