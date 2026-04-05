@@ -1863,3 +1863,49 @@ tbody tr:last-child td {
 }
 
 /* nav-menu spacing handled in main definition */
+
+/* ---------- Editor Tabs ---------- */
+.editor-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 0;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.editor-tab {
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    transition: all 0.15s;
+}
+.editor-tab.active {
+    background: var(--color-primary);
+    color: white;
+}
+.editor-tab:hover:not(.active) {
+    background: var(--bg-input);
+}
+.editor-panel {
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    overflow: hidden;
+}
+
+/* ---------- GrapesJS dark mode ---------- */
+:root .gjs-one-bg { background: var(--bg-card) !important; }
+:root .gjs-two-color { color: var(--text-primary) !important; }
+:root .gjs-three-bg { background: var(--bg-input) !important; }
+:root .gjs-four-color, :root .gjs-four-color-h:hover { color: var(--color-primary) !important; }
+:root .gjs-pn-panel { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
+:root .gjs-block { background: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+:root .gjs-category-title { background: var(--bg-card) !important; color: var(--text-primary) !important; }

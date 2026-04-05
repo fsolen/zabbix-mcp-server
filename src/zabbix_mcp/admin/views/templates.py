@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 from pathlib import Path
 
@@ -281,12 +282,20 @@ async def template_preview(request: Request) -> Response:
         end_y = 100.0 - 80.0 * math.sin(angle_rad)
         gauge_arc = f"M 20 100 A 80 80 0 1 1 {end_x:.1f} {end_y:.1f}"
 
+        # Use initMAX logo as preview fallback
+        logo_fallback = None
+        logo_path = Path(__file__).parent.parent / "static" / "logo-horizontal-dark.svg"
+        if logo_path.exists():
+            logo_data = logo_path.read_bytes()
+            logo_b64 = base64.b64encode(logo_data).decode("ascii")
+            logo_fallback = f"data:image/svg+xml;base64,{logo_b64}"
+
         rendered = template.render(
             company="Sample Company",
             subtitle="IT Monitoring Service",
             generated_at="2026-01-01 00:00 UTC",
             page_label="Page",
-            logo_base64=None,
+            logo_base64=logo_fallback,
             availability_pct=pct,
             gauge_arc_path=gauge_arc,
             total_events=3,

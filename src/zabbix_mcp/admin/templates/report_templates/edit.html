@@ -1,23 +1,15 @@
 {% extends "base.html" %}
 {% set t = template or {} %}
-{% block title %}{% if t.id %}Edit Template: {{ t.name }}{% else %}Create Template{% endif %}{% endblock %}
+{% block title %}{% if t.id %}Edit: {{ t.name }}{% else %}New Template{% endif %}{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
         <h1 class="page-title">{% if t.id %}{{ t.name }}{% else %}New Template{% endif %}</h1>
-        <p class="page-subtitle">{% if t.id %}Edit HTML report template{% else %}Create a new report template{% endif %}</p>
+        <p class="page-subtitle">Design report templates with drag & drop or raw HTML</p>
     </div>
     <a href="/templates" class="btn btn-ghost">&larr; Back to Templates</a>
 </div>
-
-<!-- Hidden form for save -->
-<form method="post" action="/templates/{{ t.id or 'create' }}" id="template-form">
-    <input type="hidden" name="name" id="hidden-name">
-    <input type="hidden" name="display_name" id="hidden-display-name">
-    <input type="hidden" name="description" id="hidden-desc">
-    <input type="hidden" name="html_content" id="hidden-content">
-</form>
 
 {% if error %}
 <div class="alert alert-danger" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(239,68,68,0.1); border:1px solid var(--color-danger); color:var(--color-danger);">
@@ -30,7 +22,7 @@
     <div class="form-group">
         <label class="form-label" for="template-name">Template Name</label>
         {% if t.id %}
-        <input type="text" id="template-name" name="display_name" class="form-input" value="{{ t.name | default('') }}" placeholder="My Report Template">
+        <input type="text" id="template-name" name="display_name" class="form-input" value="{{ t.name | default('') }}">
         {% else %}
         <input type="text" id="template-name" name="name" class="form-input" value="{{ initial_name | default(t.name | default('')) }}" placeholder="My Report Template" required>
         {% endif %}
@@ -41,34 +33,50 @@
     </div>
 </div>
 
-<!-- Split-view Editor -->
-<div class="editor-container">
-    <!-- Left: Code editor -->
-    <div class="editor-pane">
-        <div class="editor-toolbar">
-            <button class="btn btn-primary btn-sm" id="save-btn" onclick="submitTemplate()">Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="updatePreview()">Preview</button>
-            <div style="flex:1;"></div>
-            <select class="form-select" style="width:auto; min-width:160px; padding:4px 28px 4px 8px; font-size:0.82rem;" onchange="insertVariable(this.value); this.selectedIndex=0;">
-                <option value="">Insert variable...</option>
-                <option value="{{ '{{' }} company {{ '}}' }}">company</option>
-                <option value="{{ '{{' }} period_label {{ '}}' }}">period_label</option>
-                <option value="{{ '{{' }} hosts {{ '}}' }}">hosts</option>
-                <option value="{{ '{{' }} availability_pct {{ '}}' }}">availability_pct</option>
-                <option value="{{ '{{' }} generated_at {{ '}}' }}">generated_at</option>
-                <option value="{{ '{{' }} logo_base64 {{ '}}' }}">logo_base64</option>
-            </select>
-        </div>
-        <textarea class="editor-textarea" id="template-editor" name="html_content" spellcheck="false">{{ initial_content | default('') }}</textarea>
-    </div>
+<!-- Editor Mode Tabs -->
+<div class="editor-tabs">
+    <button class="editor-tab active" id="tab-visual" onclick="switchTab('visual')">&#x1F3A8; Visual Editor</button>
+    <button class="editor-tab" id="tab-html" onclick="switchTab('html')">&#x1F4DD; HTML Code</button>
+    <div style="flex:1;"></div>
+    <select class="form-select" style="width:auto; min-width:160px; padding:4px 28px 4px 8px; font-size:0.82rem;" onchange="insertVariable(this.value); this.selectedIndex=0;">
+        <option value="">Insert variable...</option>
+        <option value="{{ '{{' }} company {{ '}}' }}">company</option>
+        <option value="{{ '{{' }} period_label {{ '}}' }}">period_label</option>
+        <option value="{{ '{{' }} hosts {{ '}}' }}">hosts</option>
+        <option value="{{ '{{' }} availability_pct {{ '}}' }}">availability_pct</option>
+        <option value="{{ '{{' }} generated_at {{ '}}' }}">generated_at</option>
+        <option value="{{ '{{' }} logo_base64 {{ '}}' }}">logo_base64</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="renderPreview()">&#x1F441; Preview</button>
+    <button class="btn btn-primary btn-sm" onclick="submitTemplate()">&#x1F4BE; Save</button>
+</div>
 
-    <!-- Right: Preview -->
-    <div class="editor-pane">
-        <div class="editor-toolbar">
-            <span class="text-sm text-muted">Preview</span>
+<!-- Visual Editor (GrapesJS) -->
+<div id="visual-editor" class="editor-panel">
+    <div id="gjs" style="height:600px; border:none;"></div>
+</div>
+
+<!-- HTML Editor -->
+<div id="html-editor" class="editor-panel" style="display:none;">
+    <textarea class="editor-textarea" id="template-editor" name="html_content" spellcheck="false" style="height:600px;">{{ initial_content | default('') }}</textarea>
+</div>
+
+<!-- Hidden form for submission -->
+<form method="post" action="/templates/{{ t.id or 'create' }}" id="template-form">
+    <input type="hidden" name="name" id="hidden-name">
+    <input type="hidden" name="display_name" id="hidden-display-name">
+    <input type="hidden" name="description" id="hidden-desc">
+    <input type="hidden" name="html_content" id="hidden-content">
+</form>
+
+<!-- Preview Modal -->
+<div class="modal-overlay" id="preview-modal" style="display:none;">
+    <div class="modal-card" style="max-width:900px; height:80vh;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px;">
+            <h3>Rendered Preview</h3>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('preview-modal').style.display='none'">&times;</button>
         </div>
-        <iframe class="editor-preview" id="preview-frame"
-                {% if t.id %}src="/templates/{{ t.id }}/preview"{% endif %}></iframe>
+        <iframe id="preview-frame" style="width:100%; height:calc(100% - 60px); border:none; background:white; border-radius:0 0 var(--radius-lg) var(--radius-lg);"></iframe>
     </div>
 </div>
 
@@ -112,30 +120,131 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/grapes.min.js"></script>
+<script src="/static/grapes-preset-webpage.min.js"></script>
 <script>
+// Initialize GrapesJS
+var editor = grapesjs.init({
+    container: '#gjs',
+    height: '600px',
+    width: 'auto',
+    storageManager: false,
+    plugins: ['gjs-preset-webpage'],
+    pluginsOpts: {
+        'gjs-preset-webpage': {}
+    },
+    canvas: {
+        styles: [
+            'https://fonts.googleapis.com/css2?family=Rubik:wght@400;600&display=swap'
+        ]
+    },
+    blockManager: {
+        blocks: [
+            {
+                id: 'zabbix-header',
+                label: '&#x1F4CA; Report Header',
+                category: 'Zabbix',
+                content: '<div style="display:flex; justify-content:space-between; padding:20px; border-bottom:2px solid #e0e0e0;"><div><small style="color:#666;">IT Monitoring Service</small></div><div><img src="" alt="Logo" style="max-height:40px;"></div></div>'
+            },
+            {
+                id: 'zabbix-title',
+                label: '&#x1F4DD; Report Title',
+                category: 'Zabbix',
+                content: '<h1 style="font-family:Rubik,sans-serif; font-size:22pt; margin:20px 0 5px;">{{ "{{" }} company {{ "}}" }} / Report</h1><h2 style="font-size:14pt; color:#555; font-weight:400;">General Information</h2>'
+            },
+            {
+                id: 'zabbix-info-table',
+                label: '&#x1F4CB; Info Table',
+                category: 'Zabbix',
+                content: '<table style="border-collapse:collapse; margin:10px 0;"><tr><th style="background:#f5f5f5; padding:6px 12px; text-align:left; width:200px;">Company</th><td style="padding:6px 12px;">{{ "{{" }} company {{ "}}" }}</td></tr><tr><th style="background:#f5f5f5; padding:6px 12px; text-align:left;">Report Period</th><td style="padding:6px 12px;">{{ "{{" }} period_label {{ "}}" }}</td></tr></table>'
+            },
+            {
+                id: 'zabbix-host-table',
+                label: '&#x1F5A5; Host Table',
+                category: 'Zabbix',
+                content: '<table style="width:100%; border-collapse:collapse;"><thead><tr><th style="background:#d32f2f; color:white; padding:6px 8px;">Host</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Availability</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Events</th></tr></thead><tbody><tr><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.name {{ "}}" }}</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.availability_pct {{ "}}" }}%</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.event_count {{ "}}" }}</td></tr></tbody></table>'
+            },
+            {
+                id: 'zabbix-gauge',
+                label: '&#x1F4CA; SLA Gauge',
+                category: 'Zabbix',
+                content: '<div style="text-align:center; margin:20px 0;"><svg width="200" height="120" viewBox="0 0 200 120"><path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e0e0" stroke-width="12"/><path d="M 20 100 A 80 80 0 1 1 178 95" fill="none" stroke="#4caf50" stroke-width="12"/><text x="100" y="90" text-anchor="middle" font-size="28" font-weight="600">99.5%</text></svg></div>'
+            },
+            {
+                id: 'zabbix-graph',
+                label: '&#x1F4C8; Graph Placeholder',
+                category: 'Zabbix',
+                content: '<div style="text-align:center; padding:20px; background:#f5f5f5; border:2px dashed #ccc; margin:10px 0;"><p style="color:#999;">&#x1F4C8; Zabbix Graph</p><p style="font-size:0.8em; color:#bbb;">Graph will be rendered by graph_render tool</p></div>'
+            }
+        ]
+    }
+});
+
+// Load initial content
+var initialContent = document.getElementById('template-editor').value;
+if (initialContent) {
+    editor.setComponents(initialContent);
+}
+
+// Tab switching
+function switchTab(tab) {
+    document.getElementById('tab-visual').classList.toggle('active', tab === 'visual');
+    document.getElementById('tab-html').classList.toggle('active', tab === 'html');
+    document.getElementById('visual-editor').style.display = tab === 'visual' ? 'block' : 'none';
+    document.getElementById('html-editor').style.display = tab === 'html' ? 'block' : 'none';
+
+    if (tab === 'html') {
+        // Sync from GrapesJS to textarea
+        var gjsCss = editor.getCss();
+        var gjsHtml = editor.getHtml();
+        document.getElementById('template-editor').value = gjsHtml + (gjsCss ? '<style>' + gjsCss + '</style>' : '');
+    } else {
+        // Sync from textarea to GrapesJS
+        editor.setComponents(document.getElementById('template-editor').value);
+    }
+}
+
+// Get HTML from active editor
+function getEditorHtml() {
+    if (document.getElementById('visual-editor').style.display !== 'none') {
+        var gjsCss = editor.getCss();
+        var gjsHtml = editor.getHtml();
+        return gjsHtml + (gjsCss ? '<style>' + gjsCss + '</style>' : '');
+    }
+    return document.getElementById('template-editor').value;
+}
+
+// Save
 function submitTemplate() {
     document.getElementById('hidden-name').value = document.getElementById('template-name').value;
     document.getElementById('hidden-display-name').value = document.getElementById('template-name').value;
     document.getElementById('hidden-desc').value = document.getElementById('template-desc').value;
-    document.getElementById('hidden-content').value = document.getElementById('template-editor').value;
+    document.getElementById('hidden-content').value = getEditorHtml();
     document.getElementById('template-form').submit();
 }
 
-function updatePreview() {
-    var content = document.getElementById('template-editor').value;
-    var iframe = document.getElementById('preview-frame');
+// Render preview with server-side Jinja2
+function renderPreview() {
+    var html = getEditorHtml();
+    document.getElementById('preview-modal').style.display = 'flex';
     var form = new FormData();
-    form.append('html_content', content);
+    form.append('html_content', html);
     fetch('/templates/preview', {method: 'POST', body: form})
         .then(function(r) { return r.text(); })
-        .then(function(html) {
+        .then(function(rendered) {
+            var iframe = document.getElementById('preview-frame');
             var doc = iframe.contentDocument || iframe.contentWindow.document;
-            doc.open(); doc.write(html); doc.close();
+            doc.open(); doc.write(rendered); doc.close();
         });
 }
 
+// Insert variable at cursor (HTML mode only)
 function insertVariable(variable) {
     if (!variable) return;
+    // If in visual mode, switch to HTML first
+    if (document.getElementById('visual-editor').style.display !== 'none') {
+        switchTab('html');
+    }
     var textarea = document.getElementById('template-editor');
     var start = textarea.selectionStart;
     var end = textarea.selectionEnd;
@@ -145,25 +254,12 @@ function insertVariable(variable) {
     textarea.focus();
 }
 
+// Ctrl+S / Cmd+S
 document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         submitTemplate();
     }
 });
-
-// Live preview — debounced auto-update while typing
-var _previewTimer = null;
-var editor = document.getElementById('template-editor');
-if (editor) {
-    editor.addEventListener('input', function() {
-        clearTimeout(_previewTimer);
-        _previewTimer = setTimeout(updatePreview, 800);
-    });
-    // Initial preview on page load
-    if (editor.value.trim()) {
-        setTimeout(updatePreview, 300);
-    }
-}
 </script>
 {% endblock %}

@@ -189,24 +189,29 @@
 <div class="settings-section">
     <h2 class="settings-section-title">&#x1F527; Tool Exposure</h2>
     <form method="post" action="/settings/tools">
-        <div class="settings-row">
-            <div class="settings-label">Enabled Tools</div>
-            <div>
-                <textarea name="tools" class="form-input" rows="2" placeholder="monitoring, data_collection, alerts">{{ settings.tools | join(', ') if settings.tools else '' }}</textarea>
-                <div class="form-hint">Empty = all tools enabled. Comma-separated group names.</div>
+        <input type="hidden" name="disabled_tools" id="disabled-tools-input" value="{{ settings.disabled_tools | join(',') if settings.disabled_tools else '' }}">
+
+        <div class="form-hint" style="margin-bottom:12px;">
+            &#x26A0;&#xFE0F; Disabled tools are hidden from <strong>all</strong> MCP tokens globally.
+        </div>
+
+        <input type="text" class="form-input" placeholder="Search tools and groups..."
+               oninput="filterTools(this.value)" style="margin-bottom:16px;">
+
+        <div id="tools-container">
+            <!-- Allowed -->
+            <h3 style="color:var(--color-success); margin-bottom:8px;">&#x2705; Allowed</h3>
+            <div id="allowed-tools" class="tool-chips">
+                <!-- chips rendered by JS -->
+            </div>
+
+            <!-- Disabled -->
+            <h3 style="color:var(--color-danger); margin-top:16px; margin-bottom:8px;">&#x274C; Disabled</h3>
+            <div id="disabled-tools" class="tool-chips">
+                <!-- chips rendered by JS -->
             </div>
         </div>
-        <div class="settings-row">
-            <div class="settings-label">Disabled Tools</div>
-            <div>
-                <textarea name="disabled_tools" class="form-input" rows="2" placeholder="administration, users">{{ settings.disabled_tools | join(', ') if settings.disabled_tools else '' }}</textarea>
-                <div class="form-hint">Comma-separated group names to exclude.</div>
-            </div>
-        </div>
-        <div class="settings-row">
-            <div class="settings-label"></div>
-            <div class="form-hint" style="font-style:italic;">Available groups: <code>monitoring</code>, <code>data_collection</code>, <code>alerts</code>, <code>users</code>, <code>administration</code></div>
-        </div>
+
         {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Tool Settings</button>
@@ -303,4 +308,125 @@
 <form id="upload-logo-form" method="post" action="/settings/upload/logo" enctype="multipart/form-data" style="display:none;"></form>
 <form id="upload-tls-cert-form" method="post" action="/settings/upload/tls_cert" enctype="multipart/form-data" style="display:none;"></form>
 <form id="upload-tls-key-form" method="post" action="/settings/upload/tls_key" enctype="multipart/form-data" style="display:none;"></form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var TOOL_GROUPS = {
+    "monitoring": {
+        description: "Hosts, problems, triggers, items, events, history, trends, SLA, dashboards, maps",
+        tools: ["host", "hostgroup", "hostinterface", "hostprototype",
+                "item", "itemprototype", "trigger", "triggerprototype",
+                "problem", "event", "history", "trend",
+                "graph", "graphitem", "graphprototype",
+                "discoveryrule", "discoveryruleprototype",
+                "dcheck", "dhost", "drule", "dservice", "httptest", "sla"]
+    },
+    "data_collection": {
+        description: "Templates, template groups, template dashboards, value maps, dashboards",
+        tools: ["template", "templategroup", "templatedashboard",
+                "valuemap", "dashboard"]
+    },
+    "alerts": {
+        description: "Actions, media types, alert history, script execution",
+        tools: ["action", "alert", "mediatype", "script"]
+    },
+    "users": {
+        description: "Users, user groups, user directories, macros, tokens, roles, MFA",
+        tools: ["user", "usergroup", "userdirectory", "usermacro",
+                "token", "role", "mfa"]
+    },
+    "administration": {
+        description: "Settings, housekeeping, authentication, autoregistration, configuration, connectors, proxies, modules",
+        tools: ["settings", "housekeeping", "authentication", "autoregistration",
+                "configuration", "connector", "correlation", "hanode",
+                "iconmap", "image", "maintenance", "map", "module",
+                "proxy", "proxygroup", "regexp", "report", "task",
+                "auditlog"]
+    }
+};
+
+var disabledTools = (document.getElementById('disabled-tools-input').value || '').split(',').filter(Boolean);
+
+function isDisabled(name) {
+    return disabledTools.indexOf(name) !== -1;
+}
+
+function toggleTool(name, isGroup) {
+    if (isGroup) {
+        var group = TOOL_GROUPS[name];
+        if (isDisabled(name)) {
+            // Enable group + all its tools
+            disabledTools = disabledTools.filter(function(t) {
+                return t !== name && (!group || group.tools.indexOf(t) === -1);
+            });
+        } else {
+            // Disable group + all its tools
+            if (disabledTools.indexOf(name) === -1) disabledTools.push(name);
+            group.tools.forEach(function(tool) {
+                if (disabledTools.indexOf(tool) === -1) disabledTools.push(tool);
+            });
+        }
+    } else {
+        if (isDisabled(name)) {
+            disabledTools = disabledTools.filter(function(t) { return t !== name; });
+        } else {
+            disabledTools.push(name);
+        }
+    }
+    document.getElementById('disabled-tools-input').value = disabledTools.join(',');
+    renderTools();
+}
+
+function renderTools() {
+    var allowedEl = document.getElementById('allowed-tools');
+    var disabledEl = document.getElementById('disabled-tools');
+    var allowedHTML = '';
+    var disabledHTML = '';
+
+    for (var group in TOOL_GROUPS) {
+        var info = TOOL_GROUPS[group];
+        var groupDisabled = isDisabled(group);
+        var icon = groupDisabled ? '\u2705' : '\u274C';
+        var chip = '<span class="tool-chip tool-chip-group' + (groupDisabled ? ' disabled' : '') + '" ' +
+                   'title="' + info.description + '" onclick="toggleTool(\'' + group + '\', true)">' +
+                   group.replace(/_/g, ' ') +
+                   '<span class="chip-toggle">' + icon + '</span></span>';
+
+        if (groupDisabled) {
+            disabledHTML += chip;
+        } else {
+            allowedHTML += chip;
+        }
+
+        // Render individual tool chips under the group
+        info.tools.forEach(function(tool) {
+            var toolDisabled = isDisabled(tool) || groupDisabled;
+            var toolIcon = toolDisabled ? '\u2705' : '\u274C';
+            var toolChip = '<span class="tool-chip tool-chip-tool' + (toolDisabled ? ' disabled' : '') + '" ' +
+                           'title="' + tool + ' (group: ' + group + ')" ' +
+                           'onclick="toggleTool(\'' + tool + '\', false)">' +
+                           tool +
+                           '<span class="chip-toggle">' + toolIcon + '</span></span>';
+            if (toolDisabled) {
+                disabledHTML += toolChip;
+            } else {
+                allowedHTML += toolChip;
+            }
+        });
+    }
+
+    allowedEl.innerHTML = allowedHTML || '<span class="text-muted">No allowed tools</span>';
+    disabledEl.innerHTML = disabledHTML || '<span class="text-muted">No disabled tools</span>';
+}
+
+function filterTools(query) {
+    query = query.toLowerCase();
+    document.querySelectorAll('.tool-chip').forEach(function(chip) {
+        chip.style.display = chip.textContent.toLowerCase().indexOf(query) !== -1 ? '' : 'none';
+    });
+}
+
+renderTools();
+</script>
 {% endblock %}

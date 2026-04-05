@@ -84,6 +84,7 @@ class AdminApp:
         from zabbix_mcp.admin.views.audit import audit_view, audit_export
 
         routes = [
+            Route("/health", self._admin_health, methods=["GET"]),
             Route("/login", self._login, methods=["GET", "POST"]),
             Route("/logout", self._logout, methods=["POST"]),
             Route("/", dashboard),
@@ -170,6 +171,10 @@ class AdminApp:
         if not session:
             return None
         return session
+
+    async def _admin_health(self, request: Request) -> Response:
+        """Health check endpoint — no auth required."""
+        return JSONResponse({"status": "ok", "portal": "admin", "version": "1.16"})
 
     async def _login(self, request: Request) -> Response:
         """Handle login GET (form) and POST (submit)."""

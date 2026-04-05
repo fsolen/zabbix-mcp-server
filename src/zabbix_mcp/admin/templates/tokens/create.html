@@ -33,33 +33,11 @@
 
         <div class="form-group">
             <label class="form-label">Scopes</label>
-            <div class="scope-tags">
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-all" name="scopes" value="*" onchange="toggleAllScopes(this)">
-                    <label for="scope-all">* (all)</label>
-                </div>
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-monitoring" name="scopes" value="monitoring" class="scope-checkbox">
-                    <label for="scope-monitoring">monitoring</label>
-                </div>
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-data-collection" name="scopes" value="data_collection" class="scope-checkbox">
-                    <label for="scope-data-collection">data_collection</label>
-                </div>
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-alerts" name="scopes" value="alerts" class="scope-checkbox">
-                    <label for="scope-alerts">alerts</label>
-                </div>
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-users" name="scopes" value="users" class="scope-checkbox">
-                    <label for="scope-users">users</label>
-                </div>
-                <div class="scope-tag">
-                    <input type="checkbox" id="scope-administration" name="scopes" value="administration" class="scope-checkbox">
-                    <label for="scope-administration">administration</label>
-                </div>
+            <input type="hidden" name="scopes" id="scopes-input" value="*">
+            <div class="scope-chips" id="scope-chips-container">
+                <!-- rendered by JS -->
             </div>
-            <div class="form-hint">Select which API scopes this token can access.</div>
+            <div class="form-hint">Click groups to toggle access. Globally disabled groups cannot be enabled per-token.</div>
         </div>
 
         <div class="form-group">
@@ -76,7 +54,13 @@
         <div class="form-group">
             <label class="form-label" for="ip_allowlist">Token IP Restriction</label>
             <textarea id="ip_allowlist" name="ip_allowlist" class="form-textarea" rows="3" placeholder="192.168.1.0/24&#10;10.0.0.1&#10;Leave empty = no restriction"></textarea>
-            <div class="form-hint">Per-token IP filter — only these IPs can authenticate with this token. This is separate from the global <a href="/settings">IP Allowlist</a> in Settings which applies to all connections. One IP/CIDR per line.</div>
+            <div class="form-hint">Complements the global IP allowlist in <a href="/settings">Settings</a> &mdash; cannot override it. If an IP is blocked globally, this token cannot allow it. One IP/CIDR per line.</div>
+            <div class="form-hint" style="margin-top:4px; font-style:italic;">Default: all IPs allowed. Recommended: restrict to specific IPs for security.</div>
+            {% if global_allowed_hosts %}
+            <div class="form-hint" style="margin-top:4px;">
+                <span class="badge badge-muted">Global allowlist</span> {{ global_allowed_hosts | join(', ') }}
+            </div>
+            {% endif %}
         </div>
 
         <div class="form-group">
@@ -104,12 +88,88 @@
 
 {% block scripts %}
 <script>
-function toggleAllScopes(el) {
-    var checkboxes = document.querySelectorAll('.scope-checkbox');
-    checkboxes.forEach(function(cb) {
-        cb.checked = false;
-        cb.disabled = el.checked;
+var SCOPE_GROUPS = ['monitoring', 'data_collection', 'alerts', 'users', 'administration'];
+var SCOPE_DESCRIPTIONS = {
+    'monitoring': 'Hosts, problems, triggers, items, events, history, trends, SLA',
+    'data_collection': 'Templates, template groups, value maps, dashboards',
+    'alerts': 'Actions, media types, alert history, scripts',
+    'users': 'Users, user groups, roles, tokens, macros, MFA',
+    'administration': 'Settings, proxies, housekeeping, audit, configuration'
+};
+var globalDisabledGroups = {{ disabled_groups | tojson if disabled_groups else '[]' }};
+var selectedScopes = ['*'];
+
+function isScopeSelected(name) {
+    return selectedScopes.indexOf(name) !== -1 || selectedScopes.indexOf('*') !== -1;
+}
+
+function toggleScope(name) {
+    if (globalDisabledGroups.indexOf(name) !== -1) return;
+
+    if (name === '*') {
+        if (selectedScopes.indexOf('*') !== -1) {
+            selectedScopes = [];
+        } else {
+            selectedScopes = ['*'];
+        }
+    } else {
+        // Remove wildcard if present
+        var wIdx = selectedScopes.indexOf('*');
+        if (wIdx !== -1) {
+            // Switching from "all" — select all groups except the clicked one
+            selectedScopes = SCOPE_GROUPS.filter(function(g) {
+                return g !== name && globalDisabledGroups.indexOf(g) === -1;
+            });
+        } else {
+            var idx = selectedScopes.indexOf(name);
+            if (idx !== -1) {
+                selectedScopes.splice(idx, 1);
+            } else {
+                selectedScopes.push(name);
+            }
+            // If all non-disabled groups selected, switch to wildcard
+            var allSelected = SCOPE_GROUPS.every(function(g) {
+                return globalDisabledGroups.indexOf(g) !== -1 || selectedScopes.indexOf(g) !== -1;
+            });
+            if (allSelected) selectedScopes = ['*'];
+        }
+    }
+    document.getElementById('scopes-input').value = selectedScopes.join(',');
+    renderScopeChips();
+}
+
+function renderScopeChips() {
+    var container = document.getElementById('scope-chips-container');
+    var html = '';
+
+    // All chip
+    var allSelected = selectedScopes.indexOf('*') !== -1;
+    html += '<span class="scope-chip' + (allSelected ? ' selected' : '') + '" ' +
+            'title="All tool groups" onclick="toggleScope(\'*\')">' +
+            '* (all)<span class="scope-badge">' + (allSelected ? ' \u2705' : '') + '</span></span>';
+
+    SCOPE_GROUPS.forEach(function(group) {
+        var isGlobalDisabled = globalDisabledGroups.indexOf(group) !== -1;
+        var isSelected = !isGlobalDisabled && isScopeSelected(group);
+        var cls = 'scope-chip';
+        if (isGlobalDisabled) cls += ' globally-disabled';
+        else if (isSelected) cls += ' selected';
+
+        var title = SCOPE_DESCRIPTIONS[group] || group;
+        if (isGlobalDisabled) title += ' (disabled globally in Settings)';
+
+        html += '<span class="' + cls + '" title="' + title + '" ' +
+                'onclick="toggleScope(\'' + group + '\')">' +
+                group.replace(/_/g, ' ');
+        if (isGlobalDisabled) {
+            html += '<span class="scope-badge" style="opacity:1;">\u26A0\uFE0F</span>';
+        } else {
+            html += '<span class="scope-badge">' + (isSelected ? ' \u2705' : ' \u274C') + '</span>';
+        }
+        html += '</span>';
     });
+
+    container.innerHTML = html;
 }
 
 function toggleExpiry(el) {
@@ -121,6 +181,7 @@ function toggleExpiry(el) {
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     toggleExpiry(document.getElementById('no-expiry'));
+    renderScopeChips();
 });
 </script>
 {% endblock %}

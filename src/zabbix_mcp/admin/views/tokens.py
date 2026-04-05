@@ -24,6 +24,31 @@ from zabbix_mcp.token_store import TokenStore
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
+# All known tool groups
+_ALL_GROUPS = ["monitoring", "data_collection", "alerts", "users", "administration"]
+
+
+def _get_global_context(admin_app) -> dict:
+    """Read global disabled_tools and allowed_hosts from config for token templates."""
+    disabled_groups: list[str] = []
+    global_allowed_hosts: list[str] = []
+    if TOMLKIT_AVAILABLE:
+        try:
+            doc = load_config_document(admin_app.config_path)
+            server_cfg = doc.get("server", {})
+            raw_disabled = server_cfg.get("disabled_tools", [])
+            if isinstance(raw_disabled, list):
+                disabled_groups = [g for g in raw_disabled if g in _ALL_GROUPS]
+            raw_hosts = server_cfg.get("allowed_hosts", [])
+            if isinstance(raw_hosts, list):
+                global_allowed_hosts = list(raw_hosts)
+        except Exception:
+            pass
+    return {
+        "disabled_groups": disabled_groups,
+        "global_allowed_hosts": global_allowed_hosts,
+    }
+
 
 async def token_list(request: Request) -> Response:
     admin_app = request.app.state.admin_app
@@ -52,9 +77,9 @@ async def token_create(request: Request) -> Response:
         })
 
     if request.method == "GET":
-        return admin_app.render("tokens/create.html", request, {
-            "active": "tokens",
-        })
+        ctx = {"active": "tokens"}
+        ctx.update(_get_global_context(admin_app))
+        return admin_app.render("tokens/create.html", request, ctx)
 
     # POST — create token
     form = await request.form()
@@ -65,8 +90,12 @@ async def token_create(request: Request) -> Response:
             "error": "Name is required.",
         })
 
-    # Parse scopes from form checkboxes
-    scopes = form.getlist("scopes")
+    # Parse scopes from hidden input (comma-separated) or checkboxes
+    scopes_raw = str(form.get("scopes", "")).strip()
+    if scopes_raw:
+        scopes = [s.strip() for s in scopes_raw.split(",") if s.strip()]
+    else:
+        scopes = form.getlist("scopes")
     if not scopes:
         scopes = ["*"]
 
@@ -137,7 +166,11 @@ async def token_detail(request: Request) -> Response:
         if name:
             updates["name"] = name
 
-        scopes = form.getlist("scopes")
+        scopes_raw = str(form.get("scopes", "")).strip()
+        if scopes_raw:
+            scopes = [s.strip() for s in scopes_raw.split(",") if s.strip()]
+        else:
+            scopes = form.getlist("scopes")
         if scopes:
             updates["scopes"] = list(scopes)
 
@@ -172,11 +205,13 @@ async def token_detail(request: Request) -> Response:
 
         return RedirectResponse(f"/tokens/{token_id}", status_code=303)
 
-    return admin_app.render("tokens/detail.html", request, {
+    ctx = {
         "active": "tokens",
         "token": token,
         "token_id": token_id,
-    })
+    }
+    ctx.update(_get_global_context(admin_app))
+    return admin_app.render("tokens/detail.html", request, ctx)
 
 
 async def token_revoke(request: Request) -> Response:
