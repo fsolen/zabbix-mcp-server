@@ -1183,6 +1183,14 @@ def _register_tools(
         )
         count += 1
 
+    # Helper: check if an extension tool should be registered (respects tools/disabled_tools)
+    def _ext_allowed(tool_name: str) -> bool:
+        if tools_filter is not None and tool_name not in tools_filter and "extensions" not in (tools_filter or []):
+            return False
+        if disabled_tools is not None and (tool_name in disabled_tools or "extensions" in disabled_tools):
+            return False
+        return True
+
     # Generic raw API call tool
     server_desc = (
         f"Target Zabbix server. Available: {', '.join(server_names)}. "
@@ -1242,11 +1250,12 @@ def _register_tools(
             logger.exception("Error in raw API call '%s' on server '%s'", method, server_name)
             return json.dumps({"error": True, "message": f"API call failed for {method}. Check server logs for details.", "type": "APIError"})
 
-    mcp.add_tool(
-        zabbix_raw_api_call,
-        annotations=ToolAnnotations(openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("zabbix_raw_api_call"):
+        mcp.add_tool(
+            zabbix_raw_api_call,
+            annotations=ToolAnnotations(openWorldHint=True),
+        )
+        count += 1
 
     # Health check tool
     async def health_check() -> str:
@@ -1266,11 +1275,12 @@ def _register_tools(
                 results["zabbix_servers"][label] = {"status": "error"}
         return json.dumps(results, indent=2)
 
-    mcp.add_tool(
-        health_check,
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("health_check"):
+        mcp.add_tool(
+            health_check,
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+        )
+        count += 1
 
     # ------------------------------------------------------------------
     # Extension tools (server-side analytics, graph export, reporting)
@@ -1297,11 +1307,12 @@ def _register_tools(
             graphid=graphid, period=period, width=width, height=height,
         )
 
-    mcp.add_tool(
-        _graph_render, name="graph_render",
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("graph_render"):
+        mcp.add_tool(
+            _graph_render, name="graph_render",
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+        )
+        count += 1
 
     async def _anomaly_detect(
         *,
@@ -1325,11 +1336,12 @@ def _register_tools(
             period=period, threshold=threshold,
         )
 
-    mcp.add_tool(
-        _anomaly_detect, name="anomaly_detect",
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("anomaly_detect"):
+        mcp.add_tool(
+            _anomaly_detect, name="anomaly_detect",
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+        )
+        count += 1
 
     async def _capacity_forecast(
         *,
@@ -1351,11 +1363,12 @@ def _register_tools(
             hostid=hostid, item_key=item_key, threshold=threshold, period=period,
         )
 
-    mcp.add_tool(
-        _capacity_forecast, name="capacity_forecast",
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("capacity_forecast"):
+        mcp.add_tool(
+            _capacity_forecast, name="capacity_forecast",
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+        )
+        count += 1
 
     # ------------------------------------------------------------------
     # PDF Report generation (optional — requires weasyprint + jinja2)
@@ -1435,12 +1448,13 @@ def _register_tools(
                     logger.exception("Report generation failed for type '%s'", report_type)
                     return json.dumps({"error": f"Report generation failed: {exc}"})
 
-            mcp.add_tool(
-                _report_generate, name="report_generate",
-                annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-            )
-            count += 1
-            logger.info("PDF reporting enabled (report_generate tool registered)")
+            if _ext_allowed("report_generate"):
+                mcp.add_tool(
+                    _report_generate, name="report_generate",
+                    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+                )
+                count += 1
+                logger.info("PDF reporting enabled (report_generate tool registered)")
         else:
             logger.info("PDF reporting disabled (install 'weasyprint' and 'jinja2' to enable)")
     except ImportError:
@@ -1507,11 +1521,12 @@ def _register_tools(
             "message": "Review the action above. Call action_confirm with the token to execute.",
         }, indent=2)
 
-    mcp.add_tool(
-        action_prepare, name="action_prepare",
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
-    )
-    count += 1
+    if _ext_allowed("action_prepare"):
+        mcp.add_tool(
+            action_prepare, name="action_prepare",
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+        )
+        count += 1
 
     async def action_confirm(
         *,
@@ -1551,11 +1566,12 @@ def _register_tools(
             logger.exception("Action execution failed: %s", action_data["action"])
             return json.dumps({"error": f"Execution failed: {exc}", "action": action_data["action"]})
 
-    mcp.add_tool(
-        action_confirm, name="action_confirm",
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True),
-    )
-    count += 1
+    if _ext_allowed("action_confirm"):
+        mcp.add_tool(
+            action_confirm, name="action_confirm",
+            annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True),
+        )
+        count += 1
 
     return count
 

@@ -347,6 +347,7 @@ var disabledList = (document.getElementById('disabled-tools-input').value || '')
 function makeBubble(item) {
     var el = document.createElement('span');
     el.className = 'tool-bubble' + (item.type === 'group' ? ' tool-bubble-group' : ' tool-bubble-tool');
+    if (item.type === 'group') el.dataset.group = item.name;
     el.textContent = item.name.replace(/_/g, ' ');
     el.dataset.tooltip = item.desc || item.name;
     el.draggable = true;

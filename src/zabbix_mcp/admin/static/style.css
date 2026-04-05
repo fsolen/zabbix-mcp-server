@@ -729,6 +729,11 @@ tbody tr:last-child td {
     color: var(--color-danger);
 }
 
+.badge-extensions {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}
+
 .badge-\* {
     background: var(--color-success-light);
     color: var(--color-success);
@@ -2048,6 +2053,10 @@ tbody tr:last-child td {
 }
 .tool-zone-bubbles .tool-bubble-group:first-child {
     margin-top: 0;
+}
+.tool-bubble-group[data-group="extensions"] {
+    background: #fb923c;
+    color: #fff;
 }
 .tool-bubble-group.disabled {
     background: var(--bg-input);

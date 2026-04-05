@@ -44,13 +44,13 @@
         Zabbix MCP Server
     </h1>
     <h4>
-        Complete Zabbix API coverage for any MCP-compatible AI assistant (225 tools)
+        Complete Zabbix API coverage for any MCP-compatible AI assistant (231 tools)
     </h4>
     <br>
     <a href="https://github.com/initMAX/zabbix-mcp-server/releases"><img alt="Version" src="https://img.shields.io/github/v/release/initMAX/zabbix-mcp-server?color=%231f65f4&label=version"></a>&nbsp;
     <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>&nbsp;
     <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-blue">&nbsp;
-    <img alt="Tools" src="https://img.shields.io/badge/tools-225-green">&nbsp;
+    <img alt="Tools" src="https://img.shields.io/badge/tools-231-green">&nbsp;
     <img alt="Zabbix" src="https://img.shields.io/badge/zabbix-5.0%E2%80%948.0-red">&nbsp;
     <a href="https://safeskill.dev/scan/initmax-zabbix-mcp-server"><img alt="SafeSkill" src="https://img.shields.io/badge/SafeSkill-100%2F100_Verified%20Safe-brightgreen"></a>
 </div>
@@ -65,17 +65,20 @@ The server runs as a standalone HTTP service. AI clients connect to it over the 
 
 ## Features
 
-- **Complete API coverage** - All 58 Zabbix API groups (225 tools): hosts, problems, triggers, templates, users, dashboards, and more
+- **Complete API coverage** - All 58 Zabbix API groups (231 tools): hosts, problems, triggers, templates, users, dashboards, and more
+- **Extension tools** - `graph_render` (PNG export), `anomaly_detect` (z-score analysis), `capacity_forecast` (linear regression), `report_generate` (PDF reports), `action_prepare`/`action_confirm` (two-step write approval)
+- **Admin web portal** - Full web UI on port 9090 for managing tokens, users, servers, templates, settings, and audit log; dark/light mode
+- **Multi-token authentication** - Named tokens with scopes, IP restrictions, server binding, expiry; managed via admin portal, CLI (`generate-token`), or config.toml
 - **Multi-server support** - Connect to multiple Zabbix instances (production, staging, ...) with separate tokens
 - **HTTP + SSE transports** - Streamable HTTP (recommended) and SSE for clients like n8n that lack session management
-- **Tool filtering** - Limit exposed tools by category (`monitoring`, `alerts`, `users`, etc.) to stay under LLM tool limits
+- **Tool filtering** - Limit exposed tools by category (`monitoring`, `alerts`, `users`, `extensions`, etc.) to stay under LLM tool limits
 - **Compact output mode** - Get methods return only key fields by default, reducing token usage; LLM can request `extend` for full details
 - **LLM-friendly normalizations** - Symbolic enum names, auto-fill defaults, preprocessing cleanup, timestamp conversion
 - **Single config file** - One TOML file, no scattered environment variables
-- **Read-only mode** - Per-server write protection to prevent accidental changes
+- **Read-only mode** - Per-server and per-token write protection to prevent accidental changes
 - **Rate limiting** - Per-client call budget (300/min default) to protect Zabbix from flooding
 - **Auto-reconnect** - Transparent re-authentication on session expiry
-- **Production-ready** - systemd service, logrotate, security hardening
+- **Production-ready** - systemd service, logrotate, Docker support, security hardening
 - **Generic fallback** - `zabbix_raw_api_call` tool for any API method not explicitly defined
 
 ## Quick Start
@@ -185,24 +188,42 @@ The token inherits the permissions of the Zabbix user it belongs to:
 
 Use the principle of least privilege — create a dedicated Zabbix user for the MCP server with only the permissions it needs.
 
-**`auth_token`** (in `[server]`) — **optional** — protects the MCP server itself from unauthorized access. When set, MCP clients must include it in every request:
+#### MCP Authentication (optional)
 
+Protects the MCP server from unauthorized access. When configured, MCP clients must include a bearer token in every request: `Authorization: Bearer <token>`.
+
+**Recommended: Multi-token system** (v1.16+) — generate tokens via installer, admin portal, or manually:
+
+```bash
+# Generate a token via installer
+sudo ./deploy/install.sh generate-token claude
+
+# Or generate manually
+python3 -c "import secrets,hashlib; t='zmcp_'+secrets.token_hex(32); print(f'Token: {t}\nHash:  sha256:{hashlib.sha256(t.encode()).hexdigest()}')"
 ```
-Authorization: Bearer your-secret-token-here
+
+Then add to `config.toml`:
+
+```toml
+[tokens.claude]
+name = "Claude Code"
+token_hash = "sha256:<paste hash>"
+scopes = ["*"]           # or specific: ["monitoring", "alerts"]
+read_only = true
 ```
+
+Each token can have independent scopes, IP restrictions, server binding, and expiry. See [`config.example.toml`](config.example.toml) for all options.
+
+**Legacy: Single `auth_token`** — still supported for backward compatibility:
 
 ```toml
 [server]
-# ⚠⚠⚠ Only one auth_token can be active — choose based on your installation type! ⚠⚠⚠
-#
-# Local install — set the token directly:
 auth_token = "your-secret-token-here"
-
-# Docker — uncomment this instead and set MCP_AUTH_TOKEN in .env (see Docker section):
-# auth_token = "${MCP_AUTH_TOKEN}"
 ```
 
-When `auth_token` is not set, the MCP server accepts unauthenticated connections. This is safe when bound to `127.0.0.1` (default) but **must be set** when the server is exposed to the network (`0.0.0.0`).
+> Legacy `auth_token` is automatically migrated to `[tokens.legacy]` on first v1.16 start.
+
+When no tokens are configured, the server accepts unauthenticated connections. This is safe when bound to `127.0.0.1` (default) but **must be configured** when exposed to the network (`0.0.0.0`).
 
 #### Multiple Zabbix servers
 
@@ -393,7 +414,7 @@ The MCP client configuration is the same for all clients:
 }
 ```
 
-Where to put this config depends on the client. **Claude Code is recommended** — it handles large tool sets (225 tools) without issues, unlike some clients that struggle with high tool counts.
+Where to put this config depends on the client. **Claude Code is recommended** — it handles large tool sets (231 tools) without issues, unlike some clients that struggle with high tool counts.
 
 | Client | Config location | Free tier |
 |---|---|---|
@@ -485,7 +506,7 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>log_file</code></td><td>Path to log file (parent directory must exist)</td></tr>
 <tr><td><code>auth_token</code></td><td>Bearer token for HTTP/SSE authentication (supports <code>${ENV_VAR}</code>)</td></tr>
 <tr><td><code>rate_limit</code></td><td>Max Zabbix API calls per minute per client (default: <code>300</code>, set to <code>0</code> to disable)</td></tr>
-<tr><td><code>tools</code></td><td>Filter exposed tools by category or prefix — e.g. <code>["monitoring", "alerts"]</code> (default: all ~225 tools)</td></tr>
+<tr><td><code>tools</code></td><td>Filter exposed tools by category or prefix — e.g. <code>["monitoring", "alerts"]</code> (default: all ~231 tools)</td></tr>
 <tr><td><code>disabled_tools</code></td><td>Denylist counterpart to <code>tools</code> — exclude specific tool groups or prefixes</td></tr>
 <tr><td><code>tls_cert_file</code> / <code>tls_key_file</code></td><td>Enable native HTTPS — paths to TLS certificate and private key (see <a href="#tls--https">TLS / HTTPS</a> below)</td></tr>
 <tr><td><code>cors_origins</code></td><td>List of allowed CORS origins (default: disabled)</td></tr>

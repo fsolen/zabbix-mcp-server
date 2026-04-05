@@ -290,6 +290,8 @@ function makeScopeBubble(name, type, desc, groupName) {
     var parentGroupDis = groupName && isGloballyDisabled(groupName);
     var effectivelyDisabled = globalDis || parentGroupDis;
 
+    if (type === 'group') el.dataset.group = name;
+
     if (effectivelyDisabled) {
         el.className = 'tool-bubble tool-bubble-global-disabled';
         el.dataset.tooltip = desc + ' — Globally disabled in Settings. Enable it there first.';
