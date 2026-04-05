@@ -10,29 +10,65 @@
     <a href="/servers" class="btn btn-ghost">&larr; Back</a>
 </div>
 
+<div class="alert alert-warning" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning);">
+    &#x26A0;&#xFE0F; Changes to Zabbix server connections require a service restart to take effect.
+</div>
+
 <div class="card" style="max-width:640px;">
-    <form method="post" action="/servers/{{ edit_server_name }}/edit">
+    <form method="post" action="/servers/{{ edit_server_name }}/edit" id="edit-server-form">
         <div class="form-group">
             <label class="form-label">Zabbix URL</label>
-            <input type="url" name="url" class="form-input" value="{{ server.url | default('') }}" required>
+            <input type="url" name="url" id="srv-url" class="form-input" value="{{ server.url | default('') }}" required>
         </div>
         <div class="form-group">
             <label class="form-label">API Token</label>
-            <input type="text" name="api_token" class="form-input" value="{{ server.api_token | default('') }}" placeholder="Leave empty to keep current">
+            <input type="text" name="api_token" id="srv-token" class="form-input" value="{{ server.api_token | default('') }}" placeholder="Leave empty to keep current">
             <small class="text-muted">Leave empty to keep the current token</small>
         </div>
         <div class="form-group" style="display:flex; gap:24px;">
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" name="read_only" {% if server.read_only %}checked{% endif %}> Read-only
+                <input type="checkbox" name="read_only" id="srv-ro" {% if server.read_only %}checked{% endif %}> Read-only
             </label>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" name="verify_ssl" {% if server.verify_ssl %}checked{% endif %}> Verify SSL
+                <input type="checkbox" name="verify_ssl" id="srv-ssl" {% if server.verify_ssl %}checked{% endif %}> Verify SSL
             </label>
         </div>
+
+        <div id="edit-test-result" style="margin-bottom:12px;"></div>
+
         <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-ghost" onclick="testEditServer()">&#x1F50C; Test Connection</button>
             <button type="submit" class="btn btn-primary">Save Changes</button>
             <a href="/servers" class="btn btn-ghost">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+function testEditServer() {
+    var url = document.getElementById('srv-url').value;
+    var token = document.getElementById('srv-token').value;
+    var ssl = document.getElementById('srv-ssl').checked;
+    var result = document.getElementById('edit-test-result');
+    result.innerHTML = '<span class="text-muted">Testing...</span>';
+
+    // If token is empty, we can't test with a new token — test existing connection
+    if (!token) {
+        fetch('/servers/{{ edit_server_name }}/test', {method: 'POST'})
+            .then(function(r) { return r.text(); })
+            .then(function(html) { result.innerHTML = html; })
+            .catch(function() { result.innerHTML = '<span class="text-danger">Test failed</span>'; });
+        return;
+    }
+
+    fetch('/servers/test-new', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'url=' + encodeURIComponent(url) + '&api_token=' + encodeURIComponent(token) + '&verify_ssl=' + (ssl ? '1' : '0'),
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) { result.innerHTML = html; })
+    .catch(function() { result.innerHTML = '<span class="text-danger">Test failed</span>'; });
+}
+</script>
 {% endblock %}
