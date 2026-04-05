@@ -46,5 +46,6 @@ def write_audit(
         AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(AUDIT_LOG_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("zabbix_mcp.admin").warning("Failed to write audit log: %s", e)

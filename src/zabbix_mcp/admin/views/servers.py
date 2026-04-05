@@ -258,13 +258,13 @@ async def server_restart(request: Request) -> Response:
 
 async def server_test_new(request: Request) -> Response:
     """Test connection to a new Zabbix server before saving."""
+    from starlette.responses import HTMLResponse
+    import html as _html
+
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
     if not session:
         return HTMLResponse("Unauthorized", status_code=401)
-
-    from starlette.responses import HTMLResponse
-    import html as _html
 
     form = await request.form()
     url = str(form.get("url", "")).strip()

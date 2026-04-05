@@ -25,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 
 import jinja2
 
+from zabbix_mcp import __version__
 from zabbix_mcp.admin.audit_writer import write_audit
 from zabbix_mcp.admin.auth import SessionManager, LoginRateLimiter
 
@@ -136,7 +137,7 @@ class AdminApp:
     def render(self, template_name: str, request: Request, context: dict | None = None, status_code: int = 200) -> HTMLResponse:
         """Render a Jinja2 template with common context."""
         ctx: dict[str, Any] = {
-            "version": "1.16",
+            "version": __version__,
             "server_name": f"MCP: {self.config.server.host}:{self.config.server.port}/mcp",
             "current_user": "",
             "active": "",
@@ -174,7 +175,7 @@ class AdminApp:
 
     async def _admin_health(self, request: Request) -> Response:
         """Health check endpoint — no auth required."""
-        return JSONResponse({"status": "ok", "portal": "admin", "version": "1.16"})
+        return JSONResponse({"status": "ok", "portal": "admin", "version": __version__})
 
     async def _login(self, request: Request) -> Response:
         """Handle login GET (form) and POST (submit)."""

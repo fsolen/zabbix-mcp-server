@@ -157,11 +157,14 @@ async def settings_update(request: Request) -> Response:
                     value = int(value)
                 config_section[key] = value
 
-            if key in RESTART_REQUIRED:
+            if key in RESTART_REQUIRED and key in form:
                 needs_restart = True
 
         save_config_document(admin_app.config_path, doc)
         logger.info("Settings [%s] updated by %s", section, session.user)
+        from zabbix_mcp.admin.audit_writer import write_audit
+        client_ip = request.client.host if request.client else ""
+        write_audit("settings_update", user=session.user, target_type="settings", target_id=section, ip=client_ip)
 
         if not needs_restart:
             from zabbix_mcp.admin.config_writer import signal_reload

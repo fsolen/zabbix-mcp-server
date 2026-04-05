@@ -170,6 +170,8 @@ async def template_create(request: Request) -> Response:
             "template_file": str(CUSTOM_TEMPLATE_DIR / filename),
         })
         logger.info("Report template '%s' created by %s", safe_name, session.user)
+        from zabbix_mcp.admin.audit_writer import write_audit
+        write_audit("template_create", user=session.user, target_type="template", target_id=safe_name, ip=request.client.host if request.client else "")
     except Exception as e:
         logger.error("Failed to save template config: %s", e)
 
@@ -225,6 +227,8 @@ async def template_edit(request: Request) -> Response:
                     templates[template_id]["description"] = description
                 save_config_document(admin_app.config_path, doc)
             logger.info("Report template '%s' updated by %s", template_id, session.user)
+            from zabbix_mcp.admin.audit_writer import write_audit
+            write_audit("template_edit", user=session.user, target_type="template", target_id=template_id, ip=request.client.host if request.client else "")
         except Exception as e:
             logger.error("Failed to update template config: %s", e)
 
@@ -355,6 +359,8 @@ async def template_delete(request: Request) -> Response:
         try:
             remove_config_table(admin_app.config_path, "report_templates", template_id)
             logger.info("Report template '%s' deleted by %s", template_id, session.user)
+            from zabbix_mcp.admin.audit_writer import write_audit
+            write_audit("template_delete", user=session.user, target_type="template", target_id=template_id, ip=request.client.host if request.client else "")
         except Exception as e:
             logger.error("Failed to delete template: %s", e)
 
