@@ -639,8 +639,11 @@ install_package() {
                 warn "Some system libraries for reporting may be missing. Install: dnf install cairo pango gdk-pixbuf2"
         elif [[ -f /etc/debian_version ]]; then
             apt-get update -qq &>/dev/null || true
-            apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev &>/dev/null || \
-                warn "Some system libraries for reporting may be missing. Install: apt-get install libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0"
+            # libgdk-pixbuf2.0-0 renamed to libgdk-pixbuf-2.0-0 in Debian 13+/Ubuntu 25+
+            apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libffi-dev \
+                libgdk-pixbuf-2.0-0 2>/dev/null || \
+                apt-get install -y libgdk-pixbuf2.0-0 2>/dev/null || \
+                warn "Some system libraries for reporting may be missing. Install: apt-get install libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0"
         fi
         spin "Installing PDF reporting dependencies" "$INSTALL_DIR/venv/bin/pip" install --upgrade "$SCRIPT_DIR[reporting]" --quiet
     fi
