@@ -21,20 +21,20 @@
     <form method="post" action="/settings/server">
         <div class="settings-row">
             <div class="settings-label">
-                MCP Listen Host <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                MCP Listen Host
             </div>
             <div>
                 <input type="text" name="host" class="form-input" value="{{ settings.host | default('127.0.0.1') }}">
-                <div class="form-hint">IP address for MCP and admin portal. <code>127.0.0.1</code> = localhost only, <code>0.0.0.0</code> = all interfaces. Requires restart.</div>
+                <div class="form-hint">IP address for MCP and admin portal. <code>127.0.0.1</code> = localhost only, <code>0.0.0.0</code> = all interfaces. ⚠️ Requires restart.</div>
             </div>
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                MCP Listen Port <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                MCP Listen Port
             </div>
             <div>
                 <input type="number" name="port" class="form-input" value="{{ settings.port | default(8080) }}" min="1" max="65535" style="width:120px;">
-                <div class="form-hint">TCP port for the MCP protocol endpoint (<code>/mcp</code>). Requires restart.</div>
+                <div class="form-hint">TCP port for the MCP protocol endpoint (<code>/mcp</code>). ⚠️ Requires restart.</div>
             </div>
         </div>
         <div class="settings-row">
@@ -63,11 +63,11 @@
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                Log File <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                Log File
             </div>
             <div>
                 <input type="text" name="log_file" class="form-input" value="{{ settings.log_file | default('') }}" placeholder="/var/log/zabbix-mcp/server.log">
-                <div class="form-hint">Path to log file. Empty = stderr only. Note: changing this path also requires updating logrotate config manually.</div>
+                <div class="form-hint">Path to log file. Empty = stderr only. Note: changing this path also requires updating logrotate config manually. ⚠️ Requires restart.</div>
             </div>
         </div>
         <div class="settings-row">
@@ -106,20 +106,20 @@
     <form method="post" action="/settings/tls_access">
         <div class="settings-row">
             <div class="settings-label">
-                TLS Certificate <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                TLS Certificate
             </div>
             <div>
                 <input type="text" name="tls_cert_file" class="form-input" value="{{ settings.tls_cert_file | default('') }}" placeholder="/etc/ssl/certs/mcp.crt">
-                <div class="form-hint">Path to PEM certificate file. Applies to both MCP (:{{ settings.port | default(8080) }}) and admin portal (:{{ settings.admin_port | default(9090) }}). Requires restart.</div>
+                <div class="form-hint">Path to PEM certificate file. Applies to both MCP (:{{ settings.port | default(8080) }}) and admin portal (:{{ settings.admin_port | default(9090) }}). ⚠️ Requires restart.</div>
             </div>
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                TLS Key <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                TLS Key
             </div>
             <div>
                 <input type="text" name="tls_key_file" class="form-input" value="{{ settings.tls_key_file | default('') }}" placeholder="/etc/ssl/private/mcp.key">
-                <div class="form-hint">Path to PEM private key file. Both fields must be set to enable TLS. Requires restart.</div>
+                <div class="form-hint">Path to PEM private key file. Both fields must be set to enable TLS. ⚠️ Requires restart.</div>
             </div>
         </div>
         <div class="settings-row">
@@ -248,11 +248,11 @@
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                Admin Port <span class="restart-icon" title="Requires restart">&#x26A0;</span>
+                Admin Port
             </div>
             <div>
                 <input type="number" name="port" class="form-input" value="{{ settings.admin_port | default(9090) }}" min="1" max="65535" style="width:120px;">
-                <div class="form-hint">Separate port for admin UI. Shares host and TLS with MCP server. Requires restart.</div>
+                <div class="form-hint">Separate port for admin UI. Shares host and TLS with MCP server. ⚠️ Requires restart.</div>
             </div>
         </div>
         {% if current_user_role != 'viewer' %}
