@@ -139,6 +139,7 @@ sudo ./deploy/install.sh [COMMAND] [OPTIONS]
 | `/etc/zabbix-mcp/assets/` | Uploaded logos |
 | `/etc/zabbix-mcp/tls/` | TLS certificates and keys |
 | `/etc/logrotate.d/zabbix-mcp-server` | Logrotate config |
+| `/etc/sudoers.d/zabbix-mcp-server` | Sudoers rule for admin portal restart |
 
 ---
 

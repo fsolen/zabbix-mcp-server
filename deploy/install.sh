@@ -191,13 +191,13 @@ What it does:
 
   update:
     1. Reinstalls the package into existing virtualenv
-    2. Updates systemd unit and logrotate config
+    2. Updates systemd unit, logrotate config, and sudoers rule
     3. Checks and offers to fix file permissions
     4. Restarts the service if running
 
   uninstall:
     1. Stops and disables the systemd service
-    2. Removes systemd unit and logrotate config
+    2. Removes systemd unit, logrotate config, and sudoers rule
     3. Removes /opt/zabbix-mcp (virtualenv, binaries)
     4. Removes /etc/zabbix-mcp (config.toml)
     5. Removes /var/log/zabbix-mcp (logs)
@@ -208,6 +208,7 @@ Paths:
   Config:       /etc/zabbix-mcp/config.toml
   Logs:         /var/log/zabbix-mcp/server.log
   Service:      zabbix-mcp-server.service
+  Sudoers:      /etc/sudoers.d/zabbix-mcp-server
 HELP
     exit 0
 }
