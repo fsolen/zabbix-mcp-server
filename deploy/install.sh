@@ -825,6 +825,7 @@ do_install() {
     backup_config
     setup_admin
     migrate_legacy_token
+    migrate_report_templates
     validate_config || exit 1
 
     echo
@@ -957,6 +958,7 @@ do_update() {
     backup_config
     setup_admin
     migrate_legacy_token
+    migrate_report_templates
     validate_config || exit 1
 
     # Restart service if running
@@ -1356,6 +1358,114 @@ is_legacy = true
 " "$config_file"
             ok "Legacy auth_token migrated to [tokens.legacy]"
         fi
+    fi
+}
+
+migrate_report_templates() {
+    # Migrate custom report templates from legacy /var/log/zabbix-mcp/templates
+    # to /etc/zabbix-mcp/templates. The old location was an oversight from the
+    # beta reporting feature in v1.16 (storing config in a log directory). Files
+    # are moved, ownership/permissions reset, and template_file paths in
+    # config.toml's [report_templates.*] sections rewritten via tomlkit.
+    #
+    # Idempotent: safe to re-run. No-op if old dir is missing or already empty.
+    local old_dir="/var/log/zabbix-mcp/templates"
+    local new_dir="$CONFIG_DIR/templates"
+    local config_file="$CONFIG_DIR/config.toml"
+
+    # Always ensure new dir exists with correct ownership (covers fresh installs too)
+    if [[ ! -d "$new_dir" ]]; then
+        mkdir -p "$new_dir"
+        chown "$SERVICE_USER:$SERVICE_USER" "$new_dir"
+        chmod 750 "$new_dir"
+    fi
+
+    # No legacy directory -> nothing to migrate
+    if [[ ! -d "$old_dir" ]]; then
+        return 0
+    fi
+
+    # Count *.html files in the old dir; bail out if none
+    local file_count
+    file_count=$(find "$old_dir" -maxdepth 1 -type f -name '*.html' 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$file_count" == "0" ]]; then
+        # Empty leftover directory -> remove it silently
+        rmdir "$old_dir" 2>/dev/null || true
+        return 0
+    fi
+
+    info "Migrating report templates: $old_dir -> $new_dir ($file_count file(s))..."
+
+    # Move files. Use cp + rm rather than mv so a partial failure leaves the
+    # source intact and the operation can be safely retried.
+    local moved=0
+    local skipped=0
+    while IFS= read -r -d '' src; do
+        local base
+        base=$(basename "$src")
+        local dst="$new_dir/$base"
+        if [[ -e "$dst" ]]; then
+            warn "  $base already exists at $new_dir, leaving source untouched"
+            skipped=$((skipped + 1))
+            continue
+        fi
+        if cp -p "$src" "$dst"; then
+            chown "$SERVICE_USER:$SERVICE_USER" "$dst"
+            chmod 640 "$dst"
+            rm -f "$src"
+            moved=$((moved + 1))
+        else
+            warn "  Failed to copy $base, skipping"
+            skipped=$((skipped + 1))
+        fi
+    done < <(find "$old_dir" -maxdepth 1 -type f -name '*.html' -print0 2>/dev/null)
+
+    # Rewrite [report_templates.*].template_file paths in config.toml.
+    if [[ -f "$config_file" ]] && [[ -x "$INSTALL_DIR/venv/bin/python" ]]; then
+        if "$INSTALL_DIR/venv/bin/python" - "$config_file" "$old_dir" "$new_dir" <<'PY'
+import sys
+config_file, old_dir, new_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    import tomlkit
+except ImportError:
+    sys.exit(0)  # tomlkit unavailable -> leave config alone
+with open(config_file, 'r', encoding='utf-8') as f:
+    doc = tomlkit.load(f)
+templates = doc.get('report_templates')
+if not templates:
+    sys.exit(0)
+changed = False
+for key, tbl in templates.items():
+    path = tbl.get('template_file', '')
+    if isinstance(path, str) and path.startswith(old_dir + '/'):
+        tbl['template_file'] = new_dir + path[len(old_dir):]
+        changed = True
+if changed:
+    with open(config_file, 'w', encoding='utf-8') as f:
+        f.write(tomlkit.dumps(doc))
+    print('updated')
+PY
+        then
+            ok "  Updated template_file paths in $config_file"
+        else
+            warn "  Failed to update template paths in config.toml - check [report_templates.*] sections manually"
+        fi
+    fi
+
+    # Remove the old directory if it's now empty
+    if [[ -d "$old_dir" ]]; then
+        if rmdir "$old_dir" 2>/dev/null; then
+            ok "  Removed empty $old_dir"
+        else
+            warn "  $old_dir not empty (non-template files remain), left in place"
+        fi
+    fi
+
+    if [[ $moved -gt 0 ]]; then
+        ok "Migrated $moved report template(s) to $new_dir"
+    fi
+    if [[ $skipped -gt 0 ]]; then
+        warn "$skipped template(s) skipped - review manually"
     fi
 }
 

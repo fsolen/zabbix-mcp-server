@@ -662,6 +662,61 @@ All tools accept an optional `server` parameter to target a specific Zabbix inst
 <tr><td><code>health_check</code></td><td>Verify MCP server status and connectivity to all configured Zabbix servers</td></tr>
 </table>
 
+## PDF Reports (beta)
+
+The `report_generate` tool produces professional PDF reports from Zabbix data. Reports are rendered server-side with Jinja2 templates and WeasyPrint - the LLM only chooses the report type and parameters, so the output is deterministic and consistent across runs.
+
+> **Beta status:** Reporting (templates, custom template authoring, admin editor) is a first-concept feature shipped in v1.16. Built-in templates are stable, but the authoring API and template inventory may change. Feedback welcome at [issues](https://github.com/initMAX/zabbix-mcp-server/issues).
+
+**Built-in templates:**
+
+| Type | Contents | Required input |
+|---|---|---|
+| `availability` | Host availability with SLA gauge, event count, per-host availability table | host group, period |
+| `capacity_host` | CPU / memory / disk usage (avg, min, max) per host from trend data | host group, period |
+| `capacity_network` | Network bandwidth (Mbit/s) per interface + per-host CPU stats | host group, period |
+| `backup` | Daily success/fail matrix (hosts x days), auto-detects backup item keys (`veeam`, `bacula`, `borg`, `restic`, ...) | host group, period |
+
+**Enabling reports:**
+
+PDF generation requires two extra Python packages. The installer pulls them in automatically when the optional `[reporting]` extra is selected; for manual installs:
+
+```bash
+pip install zabbix-mcp-server[reporting]
+# or
+pip install weasyprint jinja2
+```
+
+**Branding** is configured in `config.toml`:
+
+```toml
+[server]
+report_logo     = "/etc/zabbix-mcp/logo.png"     # PNG, JPG, or SVG
+report_company  = "ACME Corp"                    # appears in report title
+report_subtitle = "IT Monitoring Service"        # header subtitle
+```
+
+**Example prompts:**
+
+| Prompt | What it does |
+|---|---|
+| *"Generate an availability report for host group 5 for the last 30 days"* | Calls `report_generate` with `report_type=availability` |
+| *"Create a capacity report for the Linux servers group, last 7 days"* | Calls `report_generate` with `report_type=capacity_host` |
+| *"Generate a backup report for the Database servers group for last month"* | Calls `report_generate` with `report_type=backup` |
+
+The tool returns the PDF as a base64-encoded data URI. Most clients (Claude Desktop, Claude Code) render or save the file automatically.
+
+**Custom templates** can be authored either via the admin portal (visual editor + HTML editor + live preview) or by hand in `/etc/zabbix-mcp/templates/` and registered in `config.toml`:
+
+```toml
+[report_templates.my_custom]
+display_name  = "My Custom Report"
+description   = "Short description"
+template_file = "/etc/zabbix-mcp/templates/my_custom.html"
+```
+
+See [`docs/REPORTING.md`](docs/REPORTING.md) for the full authoring guide: available Jinja2 context variables per report type, base CSS classes provided by `base.html`, and a worked example.
+
 ## Common Parameters (get methods)
 
 <table>

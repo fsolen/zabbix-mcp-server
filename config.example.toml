@@ -96,6 +96,26 @@ compact_output = true
 # report_subtitle = "IT Monitoring Service"
 
 # ---------------------------------------------------------------------------
+# Custom Report Templates (BETA)
+# ---------------------------------------------------------------------------
+# In addition to the 4 built-in templates (availability, capacity_host,
+# capacity_network, backup), you can register your own HTML/Jinja2 templates.
+# Custom HTML files live in /etc/zabbix-mcp/templates/ (created by the
+# installer). The admin portal includes a visual editor that writes both the
+# file and the [report_templates.*] section automatically.
+#
+# This is currently a beta / first concept - feedback welcome at
+# https://github.com/initMAX/zabbix-mcp-server/issues
+#
+# See docs/REPORTING.md for an authoring guide and the list of Jinja2
+# context variables exposed by each report type.
+#
+# [report_templates.my_custom_report]
+# display_name = "My Custom Report"
+# description  = "Short description shown in the admin portal"
+# template_file = "/etc/zabbix-mcp/templates/my_custom_report.html"
+
+# ---------------------------------------------------------------------------
 # TLS / HTTPS
 # ---------------------------------------------------------------------------
 # Enable native TLS by providing paths to a certificate and private key.

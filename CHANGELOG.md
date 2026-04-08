@@ -1,6 +1,14 @@
 # Changelog
 
-## v1.17 — unreleased
+## v1.17 — 2026-04-08
+
+### Added
+
+- **PDF reporting documentation** ([#13](https://github.com/initMAX/zabbix-mcp-server/issues/13)) - new `docs/REPORTING.md` authoring guide covering architecture, the 4 built-in templates, the `report_generate` tool API, branding, custom template authoring (admin portal and by hand), the full list of Jinja2 context variables per report type, the CSS classes provided by `base.html`, a worked end-to-end example, and the current limitations / roadmap. New "PDF Reports (beta)" section in `README.md` with built-in template overview, example prompts, and a quick custom-template snippet. `config.example.toml` now documents the `[report_templates.*]` section with a commented example.
+
+### Changed
+
+- **Custom report templates moved to `/etc/zabbix-mcp/templates/`** - in v1.16 the admin portal wrote custom HTML templates to `/var/log/zabbix-mcp/templates/`, which was an oversight (config files do not belong in a log directory). The location is now `/etc/zabbix-mcp/templates/` (`zabbix-mcp:zabbix-mcp`, mode `0750`). The installer migrates existing files automatically on `update`: it creates the new directory, moves every `*.html` file (preserving timestamps, mode `0640`), rewrites `template_file` paths in `[report_templates.*]` config sections via tomlkit (preserves comments), and removes the old empty directory. The migration is idempotent and a no-op on fresh installs or when nothing needs to be moved.
 
 ### Fixed
 

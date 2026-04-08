@@ -25,7 +25,7 @@ from zabbix_mcp.reporting.engine import TEMPLATE_DIR, _REPORT_TEMPLATES, REPORTI
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
-CUSTOM_TEMPLATE_DIR = Path("/var/log/zabbix-mcp/templates")
+CUSTOM_TEMPLATE_DIR = Path("/etc/zabbix-mcp/templates")
 
 _BUILTIN_DESCRIPTIONS = {
     "availability": "Host availability with SLA gauge chart and events per host",
