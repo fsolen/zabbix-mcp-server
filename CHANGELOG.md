@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.18 - unreleased
+## v1.18 - 2026-04-09
 
 ### Added
 
