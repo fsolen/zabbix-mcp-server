@@ -114,17 +114,6 @@
 </div>
 {% endif %}
 
-{% if restart_needed %}
-<div class="alert alert-warning" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning); display:flex; align-items:center; justify-content:space-between;">
-    <span>&#x26A0;&#xFE0F; Server config changed — restart required to apply.</span>
-    {% if current_user_role == 'admin' %}
-    <button class="btn btn-warning btn-sm" onclick="confirmRestart()">Restart Now</button>
-    {% else %}
-    <code>sudo systemctl restart zabbix-mcp-server</code>
-    {% endif %}
-</div>
-{% endif %}
-
 {% if servers %}
 <div class="grid-2">
     {% for server in servers %}
@@ -156,9 +145,6 @@
                 {% if server.config_changed %}
                 <span class="status-dot status-dot-pulse" style="--pulse-color: var(--color-warning);"></span>
                 <span class="text-muted">Restart required</span>
-                {% elif not server.is_live %}
-                <span class="status-dot status-dot-pulse" style="--pulse-color: var(--color-warning);"></span>
-                <span class="text-muted">Pending restart</span>
                 {% else %}
                 <span class="status-dot status-dot-pulse"></span>
                 <span class="text-muted">Checking...</span>

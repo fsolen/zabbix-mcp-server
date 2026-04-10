@@ -77,6 +77,15 @@
         </div>
         {% endif %}
 
+        {% if restart_needed %}
+        <div class="alert alert-warning restart-banner" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span>&#x26A0;&#xFE0F; Configuration changes are pending. The MCP server must be restarted for them to take effect.</span>
+            {% if current_user_role == 'admin' %}
+            <button type="button" class="btn btn-warning btn-sm" onclick="triggerRestart()" style="white-space:nowrap;">Restart now</button>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- HTMX loading indicator -->
         <div class="htmx-indicator" id="loader"></div>
 
@@ -169,7 +178,11 @@
             }).then(function(data) {
                 fill.style.width = '40%';
                 status.textContent = 'Restart signal sent. Waiting for MCP to come back...';
-                // Poll health check until MCP is back
+                // Poll the unauthenticated /health endpoint. We cannot use
+                // /api/mcp-status here: that requires an admin session, but
+                // sessions live in process memory and are wiped on restart,
+                // so the existing cookie returns 401 forever and polling
+                // would never see "ok".
                 var attempts = 0;
                 var maxAttempts = 30;
                 function pollHealth() {
@@ -177,13 +190,16 @@
                     var pct = 40 + Math.min(attempts * 2, 50);
                     fill.style.width = pct + '%';
                     status.textContent = 'Waiting for MCP... (' + attempts + '/' + maxAttempts + ')';
-                    fetch('/api/mcp-status').then(function(r) {
+                    fetch('/health', {cache: 'no-store'}).then(function(r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
                         return r.json();
                     }).then(function(d) {
                         if (d.status === 'ok') {
                             fill.style.width = '100%';
                             status.textContent = 'MCP is back online! Reloading...';
                             status.style.color = 'var(--color-success)';
+                            // Session was wiped during restart — reload will
+                            // bounce the user through /login, which is expected.
                             setTimeout(function() { window.location.reload(); }, 1000);
                         } else if (attempts < maxAttempts) {
                             setTimeout(pollHealth, 2000);

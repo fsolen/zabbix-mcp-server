@@ -34,7 +34,7 @@ async def servers_view(request: Request) -> Response:
 
     client_manager = admin_app.client_manager
     servers = []
-    restart_needed = False
+    drift_detected = False
 
     # Read config to get latest saved values (may differ from live)
     config_zabbix = {}
@@ -44,11 +44,13 @@ async def servers_view(request: Request) -> Response:
     except Exception:
         pass
 
-    # Build server list — prefer config values for URL etc., live status from client_manager
-    all_names = set(client_manager.server_names) | set(config_zabbix.keys())
-
-    for name in sorted(all_names):
-        cfg = config_zabbix.get(name, {})
+    # Show only servers that exist in the *config* — that's the source of
+    # truth the user just edited. Stale live entries (ones that exist in
+    # the running ClientManager but no longer in config — deleted or
+    # renamed away) are hidden, since the user already removed them; we
+    # only need to remind them via the global "restart needed" banner.
+    for name in sorted(config_zabbix.keys()):
+        cfg = config_zabbix[name]
         live_config = None
         try:
             live_config = client_manager.get_server_config(name)
@@ -64,11 +66,13 @@ async def servers_view(request: Request) -> Response:
         # Status will be loaded async via HTMX /servers/{name}/test
         config_changed = False
         if name not in client_manager.server_names:
+            # In config but not live — newly added (or renamed in),
+            # not yet active.
             config_changed = True
-            restart_needed = True
+            drift_detected = True
         elif live_config and cfg.get("url") and cfg["url"] != live_config.url:
             config_changed = True
-            restart_needed = True
+            drift_detected = True
 
         servers.append({
             "name": name,
@@ -79,15 +83,24 @@ async def servers_view(request: Request) -> Response:
             "is_live": name in client_manager.server_names,
         })
 
-    # Also check if live has servers not in config (deleted)
+    # Drift also covers the inverse case: live servers that no longer
+    # exist in config (deleted or renamed away). They are hidden from
+    # the card list above, but the banner must still appear so the user
+    # knows a restart is needed to apply the deletion.
     for name in client_manager.server_names:
         if name not in config_zabbix:
-            restart_needed = True
+            drift_detected = True
+
+    # Persist drift into the global state so the banner stays consistent
+    # across all pages (it would otherwise only show after an explicit
+    # save in this process). Never clear the flag here — only the restart
+    # endpoint may clear it.
+    if drift_detected:
+        admin_app.restart_needed = True
 
     return admin_app.render("servers.html", request, {
         "active": "servers",
         "servers": servers,
-        "restart_needed": restart_needed,
     })
 
 
@@ -158,29 +171,92 @@ async def server_edit(request: Request) -> Response:
 
     # POST — save changes
     form = await request.form()
+    new_name = str(form.get("name", "")).strip()
     url = str(form.get("url", "")).strip()
     api_token = str(form.get("api_token", "")).strip()
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
 
+    # Validate new name (allow keeping the same name as a no-op rename)
+    if not new_name or not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", new_name):
+        return admin_app.flash_redirect(
+            f"/servers/{server_name}/edit",
+            "Invalid server name. Must start with a letter and contain only letters, digits, dashes, and underscores.",
+            "danger",
+        )
+
     try:
         doc = load_config_document(admin_app.config_path)
         zabbix = doc.get("zabbix", {})
-        if server_name in zabbix:
-            if url:
-                zabbix[server_name]["url"] = url
-            if api_token:
-                zabbix[server_name]["api_token"] = api_token
-            zabbix[server_name]["read_only"] = read_only
-            zabbix[server_name]["verify_ssl"] = verify_ssl
-            save_config_document(admin_app.config_path, doc)
-            logger.info("Zabbix server '%s' updated by %s", server_name, session.user)
-            client_ip = request.client.host if request.client else ""
-            write_audit("server_edit", user=session.user, target_type="server", target_id=server_name, ip=client_ip)
-            admin_app.restart_needed = True
-            return admin_app.flash_redirect("/servers", f"Server '{server_name}' updated. Restart required.")
-        else:
+        if server_name not in zabbix:
             return admin_app.flash_redirect("/servers", f"Server '{server_name}' not found in config.", "danger")
+
+        renamed = new_name != server_name
+        if renamed and new_name in zabbix:
+            return admin_app.flash_redirect(
+                f"/servers/{server_name}/edit",
+                f"A server named '{new_name}' already exists.",
+                "danger",
+            )
+
+        # Apply field updates to the existing table first
+        if url:
+            zabbix[server_name]["url"] = url
+        if api_token:
+            zabbix[server_name]["api_token"] = api_token
+        zabbix[server_name]["read_only"] = read_only
+        zabbix[server_name]["verify_ssl"] = verify_ssl
+
+        if renamed:
+            # tomlkit has no rename — copy the table data into a new entry
+            # and delete the old one. Preserves all keys (including any
+            # extras like ssl_cert that the form doesn't expose).
+            import tomlkit
+            old_table = zabbix[server_name]
+            new_table = tomlkit.table()
+            for k, v in dict(old_table).items():
+                new_table.add(k, v)
+            zabbix.add(new_name, new_table)
+            del zabbix[server_name]
+
+            # Update tokens that explicitly reference the old name in
+            # allowed_servers, so the rename doesn't silently break ACLs.
+            tokens_section = doc.get("tokens", {})
+            updated_tokens: list[str] = []
+            for token_id in list(tokens_section.keys()):
+                token_table = tokens_section[token_id]
+                allowed = token_table.get("allowed_servers")
+                if isinstance(allowed, list) and server_name in allowed:
+                    new_allowed = [new_name if s == server_name else s for s in allowed]
+                    token_table["allowed_servers"] = new_allowed
+                    updated_tokens.append(token_id)
+            if updated_tokens:
+                logger.info(
+                    "Rename '%s' -> '%s': updated allowed_servers in tokens %s",
+                    server_name, new_name, updated_tokens,
+                )
+
+        save_config_document(admin_app.config_path, doc)
+        target_id = new_name if renamed else server_name
+        action_msg = (
+            f"Server renamed '{server_name}' -> '{new_name}'. Restart required."
+            if renamed else
+            f"Server '{server_name}' updated. Restart required."
+        )
+        logger.info("Zabbix server '%s' updated by %s%s",
+                    server_name, session.user,
+                    f" (renamed to '{new_name}')" if renamed else "")
+        client_ip = request.client.host if request.client else ""
+        write_audit(
+            "server_rename" if renamed else "server_edit",
+            user=session.user,
+            target_type="server",
+            target_id=target_id,
+            details={"old_name": server_name, "new_name": new_name} if renamed else None,
+            ip=client_ip,
+        )
+        admin_app.restart_needed = True
+        return admin_app.flash_redirect("/servers", action_msg)
     except Exception as e:
         logger.error("Failed to update server: %s", e)
         return admin_app.flash_redirect("/servers", f"Failed to update server: {e}", "danger")
@@ -242,56 +318,50 @@ async def server_test(request: Request) -> Response:
 
 
 async def server_restart(request: Request) -> Response:
-    """Restart the MCP server service (systemctl restart)."""
+    """Restart the MCP server by exiting the current process with status 1.
+
+    Backwards compatible with all existing deployments — no unit/compose
+    file changes required:
+
+      - systemd Restart=on-failure (v1.16 - v1.18 unit): exit 1 is a
+        failure, so the unit respawns automatically.
+      - systemd Restart=always (v1.19+ unit): always respawns.
+      - Docker restart: unless-stopped: PID 1 exit -> container restart.
+
+    Why os._exit(1) and not SIGTERM? systemd treats SIGTERM as a clean
+    shutdown ("success") and Restart=on-failure does NOT respawn. Exit
+    code 1 covers all three deployment modes uniformly.
+
+    Why not sudo systemctl restart? The systemd unit ships with
+    NoNewPrivileges=yes which blocks sudo from elevating, even with a
+    NOPASSWD sudoers entry. The old fallback (SIGTERM to PID 1) only
+    works in Docker, where PID 1 == this Python process; on bare-metal
+    PID 1 is systemd itself and ignores the signal.
+    """
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
     if not session or session.role != "admin":
         return RedirectResponse("/servers", status_code=303)
 
-    import subprocess, os, signal
-    restarted = False
-
-    # Try systemctl first (bare-metal / systemd)
-    # Requires sudoers entry: zabbix-mcp ALL=(root) NOPASSWD: /usr/bin/systemctl restart zabbix-mcp-server
-    try:
-        subprocess.run(
-            ["sudo", "systemctl", "restart", "zabbix-mcp-server"],
-            check=True, capture_output=True, timeout=10,
-        )
-        restarted = True
-    except FileNotFoundError:
-        pass
-    except subprocess.CalledProcessError as e:
-        logger.error("systemctl restart failed: %s", e.stderr.decode() if e.stderr else e)
-    except Exception as e:
-        logger.error("systemctl restart failed: %s", e)
-
-    # Fallback: Docker — send SIGTERM to PID 1, container policy will restart
-    if not restarted:
-        try:
-            logger.info("Sending SIGTERM to PID 1 (Docker restart)...")
-            admin_app.restart_needed = False
-            from zabbix_mcp.admin.audit_writer import write_audit
-            client_ip = request.client.host if request.client else ""
-            write_audit("server_restart", user=session.user, ip=client_ip)
-            # Kill PID 1 after a short delay so the response can be sent
-            import threading
-            def _kill():
-                import time
-                time.sleep(1)
-                os.kill(1, signal.SIGTERM)
-            threading.Thread(target=_kill, daemon=True).start()
-            return JSONResponse({"status": "restarting"})
-        except Exception as e:
-            logger.error("Docker restart failed: %s", e)
-            return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+    import os
+    import threading
 
     admin_app.restart_needed = False
-    logger.info("MCP server restarted by %s", session.user)
-    from zabbix_mcp.admin.audit_writer import write_audit
     client_ip = request.client.host if request.client else ""
     write_audit("server_restart", user=session.user, ip=client_ip)
-    return JSONResponse({"status": "restarted"})
+    logger.info("Restart requested by %s — exiting process to trigger respawn", session.user)
+
+    # Exit after a short delay so the HTTP response gets flushed first.
+    # os._exit bypasses Python cleanup (atexit, finally), which is fine
+    # since we are about to be respawned. Logs that matter were already
+    # flushed by the logger above.
+    def _exit() -> None:
+        import time
+        time.sleep(1)
+        os._exit(1)
+
+    threading.Thread(target=_exit, daemon=True).start()
+    return JSONResponse({"status": "restarting"})
 
 
 async def server_test_new(request: Request) -> Response:

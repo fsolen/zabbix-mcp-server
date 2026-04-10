@@ -10,12 +10,13 @@
     <a href="/servers" class="btn btn-ghost">&larr; Back</a>
 </div>
 
-<div class="alert alert-warning" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning);">
-    &#x26A0;&#xFE0F; Changes to Zabbix server connections require a service restart to take effect.
-</div>
-
 <div class="card" style="max-width:640px;">
     <form method="post" action="/servers/{{ edit_server_name | urlencode }}/edit" id="edit-server-form">
+        <div class="form-group">
+            <label class="form-label">Server name</label>
+            <input type="text" name="name" id="srv-name" class="form-input" value="{{ edit_server_name }}" pattern="[a-zA-Z][a-zA-Z0-9_-]*" required>
+            <small class="text-muted">Letters, digits, dashes, underscores. Must start with a letter. Renaming also updates token <code>allowed_servers</code> references.</small>
+        </div>
         <div class="form-group">
             <label class="form-label">Zabbix URL</label>
             <input type="url" name="url" id="srv-url" class="form-input" value="{{ server.url | default('') }}" required>

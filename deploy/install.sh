@@ -200,13 +200,14 @@ What it does:
 
   update:
     1. Reinstalls the package into existing virtualenv
-    2. Updates systemd unit, logrotate config, and sudoers rule
-    3. Checks and offers to fix file permissions
-    4. Restarts the service if running
+    2. Updates systemd unit and logrotate config
+    3. Removes obsolete sudoers rule from older installs (no longer used)
+    4. Checks and offers to fix file permissions
+    5. Restarts the service if running
 
   uninstall:
     1. Stops and disables the systemd service
-    2. Removes systemd unit, logrotate config, and sudoers rule
+    2. Removes systemd unit and logrotate config
     3. Removes /opt/zabbix-mcp (virtualenv, binaries)
     4. Removes /etc/zabbix-mcp (config.toml)
     5. Removes /var/log/zabbix-mcp (logs)
@@ -217,7 +218,6 @@ Paths:
   Config:       /etc/zabbix-mcp/config.toml
   Logs:         /var/log/zabbix-mcp/server.log
   Service:      zabbix-mcp-server.service
-  Sudoers:      /etc/sudoers.d/zabbix-mcp-server
 HELP
     exit 0
 }
@@ -560,8 +560,11 @@ Group=zabbix-mcp
 ExecStart=/opt/zabbix-mcp/venv/bin/zabbix-mcp-server \
     --config /etc/zabbix-mcp/config.toml
 
-Restart=on-failure
+Restart=always
 RestartSec=5
+# Restart=always is required so the admin portal can trigger a restart
+# by exiting the current process. The previous Restart=on-failure value
+# treated clean SIGTERM exits as success and did not respawn.
 
 # Logging — application writes to log_file from config.toml directly.
 # Startup errors (before logging init) go to journal:
@@ -615,37 +618,6 @@ install_logrotate() {
     create 0640 zabbix-mcp zabbix-mcp
 }
 LOGROTATE
-}
-
-# --------------------------------------------------------------------------- #
-# Embedded: sudoers — allow service user to restart via admin portal
-# --------------------------------------------------------------------------- #
-install_sudoers() {
-    local sudoers_file="/etc/sudoers.d/${SERVICE_NAME}"
-    local systemctl_path
-    systemctl_path="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
-
-    if [[ ! -d /etc/sudoers.d ]]; then
-        warn "No /etc/sudoers.d — skipping sudoers configuration."
-        return 0
-    fi
-
-    info "Installing sudoers rule (admin portal restart)..."
-    cat > "$sudoers_file" <<EOF
-# Allow the Zabbix MCP service user to restart its own service
-# via the admin portal without a password.
-${SERVICE_USER} ALL=(root) NOPASSWD: ${systemctl_path} restart ${SERVICE_NAME}
-EOF
-    chmod 440 "$sudoers_file"
-
-    # Validate syntax — remove if broken to avoid locking out sudo
-    if command -v visudo &>/dev/null; then
-        if ! visudo -cf "$sudoers_file" &>/dev/null; then
-            warn "Sudoers syntax check failed — removing $sudoers_file to avoid lockout."
-            rm -f "$sudoers_file"
-            return 1
-        fi
-    fi
 }
 
 # --------------------------------------------------------------------------- #
@@ -899,10 +871,9 @@ do_install() {
     # Package
     install_package
 
-    # systemd + logrotate + sudoers
+    # systemd + logrotate
     install_systemd_unit
     install_logrotate
-    install_sudoers
 
     # Verify permissions (catches issues from re-runs or partial earlier installs)
     check_permissions
@@ -1038,10 +1009,17 @@ do_update() {
         info "Check config.example.toml for any new parameters added in this version."
     fi
 
-    # Update systemd + logrotate + sudoers (in case they changed)
+    # Update systemd + logrotate (in case they changed)
     install_systemd_unit
     install_logrotate
-    install_sudoers
+
+    # Remove obsolete sudoers rule from older installs (no longer used —
+    # the admin portal now triggers restart by exiting the process and
+    # letting systemd's Restart=always respawn it).
+    if [[ -f "/etc/sudoers.d/${SERVICE_NAME}" ]]; then
+        rm -f "/etc/sudoers.d/${SERVICE_NAME}"
+        info "Removed obsolete sudoers rule (restart now uses self-exit)."
+    fi
 
     # Check and fix file permissions (catches issues from failed earlier installs)
     check_permissions
