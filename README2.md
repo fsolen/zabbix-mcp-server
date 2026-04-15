@@ -32,7 +32,7 @@
   📖 <b>Overview:</b> <a href="#what-is-this">What is this?</a> · <a href="#features">Features</a><br>
   🚀 <b>Install:</b> <a href="#quick-start">Quick Start</a> · <a href="#installation">Installation</a> · <a href="#installer-cli">Installer CLI</a><br>
   ⚙️ <b>Configure:</b> <a href="#configuration-reference">Reference</a> · <a href="#tls--https">TLS / HTTPS</a> · <a href="#token-budget">Token Budget</a><br>
-  🔌 <b>Use:</b> <a href="#connecting-ai-clients">AI Clients</a> · <a href="#example-prompts">Prompts</a> · <a href="#available-tools">Tools</a> · <a href="#common-parameters-get-methods">Parameters</a> · <a href="#pdf-reports-beta">PDF Reports</a><br>
+  🔌 <b>Use:</b> <a href="#client-mcp-wizard-beta">Client Wizard</a> · <a href="#connecting-ai-clients">AI Clients</a> · <a href="#example-prompts">Prompts</a> · <a href="#available-tools">Tools</a> · <a href="#common-parameters-get-methods">Parameters</a> · <a href="#pdf-reports-beta">PDF Reports</a><br>
   📚 <b>More:</b> <a href="#zabbix-compatibility">Compatibility</a> · <a href="#development">Development</a> · <a href="#related-projects">Related Projects</a> · <a href="#license">License</a> · <a href="#about-initmax">About initMAX</a>
 </p>
 
@@ -48,7 +48,7 @@ The server runs as a standalone HTTP service. AI clients connect to it over the 
 
 - **Complete API coverage** - All 58 Zabbix API groups (231 tools): hosts, problems, triggers, templates, users, dashboards, and more
 - **Extension tools** - `graph_render` (PNG export), `anomaly_detect` (z-score analysis), `capacity_forecast` (linear regression), `report_generate` (PDF reports), `action_prepare`/`action_confirm` (two-step write approval)
-- **Admin web portal** - Full web UI on port 9090 for managing tokens, users, servers, templates, settings, and audit log; dark/light mode
+- **Admin web portal** - Full web UI on port 9090 for managing tokens, users, servers, templates, settings, and audit log; dark/light mode; point-and-click **Client MCP Wizard (beta)** that generates copy-paste-ready config snippets for 14 AI clients (Claude, Codex, Cursor, Cline, VS Code, JetBrains, Goose, Open WebUI, 5ire, Gemini CLI, n8n, ...)
 - **Multi-token authentication** - Named tokens with scopes, IP restrictions, server binding, expiry; managed via admin portal, CLI (`generate-token`), or config.toml
 - **Multi-server support** - Connect to multiple Zabbix instances (production, staging, ...) with separate tokens
 - **HTTP + SSE transports** - Streamable HTTP (recommended) and SSE for clients like n8n that lack session management
@@ -324,6 +324,7 @@ The installer generates an admin password automatically. To reset: `sudo ./deplo
 | MCP Tokens | Create, revoke, per-token scope control (group + individual tool level), **per-token Zabbix server binding**, IP restrictions, expiry, read-only flag; legacy token migration with tooltip |
 | Tool Exposure | Drag & drop bubble UI for enabling/disabling tools globally and per-token; groups + individual tool prefixes; globally disabled tools shown as locked in token scopes |
 | Zabbix Servers | Connection status with **API + token validation** (detects "API online but token invalid"), version display, test connection, add/edit/delete |
+| Client MCP Wizard (beta) | Point-and-click generator: pick a Zabbix server -> pick a token (or skip auth) -> pick one of 14 AI clients -> get a copy-paste-ready config snippet + per-client install instructions. Handles URL composition, `0.0.0.0` host override, transport picker, token substitution in the snippet and curl test. **Feedback wanted** - please report issues at https://github.com/initMAX/zabbix-mcp-server/issues. |
 | Users | Admin / operator / viewer roles; password complexity enforcement (10+ chars, uppercase, digit) |
 | Report Templates | Built-in + custom templates, GrapesJS visual editor with Zabbix blocks, HTML code editor, variable picker, server-side Jinja2 preview |
 | Settings | All config.toml sections editable — MCP Server, TLS & Security, Tool Exposure (allowlist + denylist), PDF Reports & Branding, Admin Portal |
@@ -332,6 +333,34 @@ The installer generates an admin password automatically. To reset: `sudo ./deplo
 | Design | initMAX branded, dark/light/auto mode, Rubik font, instant CSS tooltips, responsive mobile layout |
 
 All changes are written back to `config.toml` (preserving comments and formatting via tomlkit). Every config change triggers a "Restart needed" indicator.
+
+#### Client MCP Wizard (beta)
+
+> **Beta** - introduced in v1.20 with 14 supported clients and wide test coverage, but we are still collecting real-world feedback on the per-client snippets, the OAuth-vs-Bearer handling (especially Claude Desktop + ChatGPT), and edge cases around Docker / NAT / reverse-proxy host overrides. Please report issues at https://github.com/initMAX/zabbix-mcp-server/issues so we can graduate it out of beta.
+
+A standalone page at `/wizard` (sidebar entry **Client MCP Wizard**) that replaces hand-editing JSON / TOML config files for 14 AI clients. Single-page progressive disclosure in four steps:
+
+1. **Pick a Zabbix server** - cards list all `[zabbix.*]` entries from `config.toml`.
+2. **Pick an MCP token** - cards show every token whose `allowed_servers` includes the chosen server, plus per-token scope chips (groups + individual prefixes), IP restrictions, and expiry. When the MCP server is in no-auth mode, a **Continue without token** card generates a tokenless snippet; when auth is enabled, the **+ Create new token** card chains into `/tokens/create?return_to=/wizard` and comes back with the new token pre-filled via a URL fragment (never sent to the server).
+3. **Pick your AI client** - grid of 14 cards: Claude Desktop, Claude Code (CLI), OpenAI Codex, ChatGPT, VS Code + GitHub Copilot, Cursor, Cline, JetBrains AI, Goose, Open WebUI, 5ire, Gemini CLI, n8n, Generic MCP Client.
+4. **Copy the config** - host override picker when `[server].host = 0.0.0.0` (Docker container IPs are de-emphasized with a manual-entry input on top), transport picker with a "detected" badge on the running transport, per-client install instructions on the left, syntax-highlighted snippet on the right with a copy-on-hover overlay icon, download-as-file button, and a matching curl quick-test block. Both code blocks substitute a pasted Bearer token live so the operator can verify before copying.
+
+Every snippet and instruction set comes from a single-source-of-truth catalog (`src/zabbix_mcp/admin/wizard_clients.py`) cross-checked against each client's current official documentation (Claude Desktop via `mcp-remote` wrapper for Bearer tokens, Claude Code with the `--transport` / `--header` flag rename from 2025, ChatGPT Developer-mode Apps & Connectors path, Gemini CLI `httpUrl` vs `url` key split, Goose Streamable HTTP YAML schema, Open WebUI native MCP since v0.6.31, etc.).
+
+<table>
+<tr>
+<td><img src="docs/admin-wizard.png" alt="Client MCP Wizard (steps 1-2) — Dark" width="400"></td>
+<td><img src="docs/admin-wizard-light.png" alt="Client MCP Wizard (steps 1-2) — Light" width="400"></td>
+</tr>
+<tr>
+<td><img src="docs/admin-wizard-step3.png" alt="Client MCP Wizard (step 3 client picker) — Dark" width="400"></td>
+<td><img src="docs/admin-wizard-step3-light.png" alt="Client MCP Wizard (step 3 client picker) — Light" width="400"></td>
+</tr>
+<tr>
+<td><img src="docs/admin-wizard-step4.png" alt="Client MCP Wizard (step 4 output) — Dark" width="400"></td>
+<td><img src="docs/admin-wizard-step4-light.png" alt="Client MCP Wizard (step 4 output) — Light" width="400"></td>
+</tr>
+</table>
 
 > **Port separation:** MCP endpoint (`/mcp`, `/health`) runs exclusively on the MCP port (default 8080). Admin portal runs exclusively on the admin port (default 9090). No admin API is exposed on the MCP port. Firewall both ports independently.
 
@@ -384,6 +413,8 @@ python3 -m venv /opt/zabbix-mcp/venv
 ```
 
 ## Connecting AI Clients
+
+> **Recommended (beta):** use the **[Client MCP Wizard](#client-mcp-wizard-beta)** in the admin portal at `/wizard`. It generates copy-paste-ready config snippets for 14 AI clients (Claude Desktop, Codex, Cursor, Cline, VS Code Copilot, JetBrains AI, Goose, Open WebUI, 5ire, Gemini CLI, n8n, Claude Code, ChatGPT, Generic) with the correct URL, transport, and Bearer header substitution. Still beta - feedback welcome at https://github.com/initMAX/zabbix-mcp-server/issues. The manual instructions below stay for reference.
 
 The server uses the **Streamable HTTP** transport by default and listens on `http://127.0.0.1:8080/mcp`. SSE transport is also available (`http://127.0.0.1:8080/sse`) for clients that do not support Streamable HTTP session management.
 
