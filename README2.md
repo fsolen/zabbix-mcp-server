@@ -13,7 +13,7 @@
         and community
     </p>
     <h4>
-        Full Zabbix API access from Claude, Codex, VS Code, JetBrains, and other MCP clients - with a web admin portal, multi-server support, scoped bearer auth, audit log, and PDF reporting built in.
+        Full Zabbix API access from Claude, Codex, VS Code, JetBrains, and other MCP clients.
     </h4>
     <br>
     <a href="https://github.com/initMAX/zabbix-mcp-server/releases"><img alt="Version" src="https://img.shields.io/github/v/release/initMAX/zabbix-mcp-server?color=%231f65f4&label=version"></a>&nbsp;
@@ -29,11 +29,11 @@
 ## Table of Contents
 
 <p align="center">
-  📖 <b>Overview:</b> <a href="#what-is-this">What is this?</a> · <a href="#features">Features</a><br>
-  🚀 <b>Install:</b> <a href="#quick-start">Quick Start</a> · <a href="#installation">Installation</a> · <a href="#installer-cli">Installer CLI</a><br>
-  ⚙️ <b>Configure:</b> <a href="#configuration-reference">Reference</a> · <a href="#tls--https">TLS / HTTPS</a> · <a href="#token-budget">Token Budget</a><br>
-  🔌 <b>Use:</b> <a href="#client-mcp-wizard-beta">Client Wizard</a> · <a href="#connecting-ai-clients">AI Clients</a> · <a href="#example-prompts">Prompts</a> · <a href="#available-tools">Tools</a> · <a href="#common-parameters-get-methods">Parameters</a> · <a href="#pdf-reports-beta">PDF Reports</a><br>
-  📚 <b>More:</b> <a href="#zabbix-compatibility">Compatibility</a> · <a href="#development">Development</a> · <a href="#related-projects">Related Projects</a> · <a href="#license">License</a> · <a href="#about-initmax">About initMAX</a>
+  <b>Overview:</b> <a href="#what-is-this">What is this?</a> · <a href="#features">Features</a><br>
+  <b>Install:</b> <a href="#quick-start">Quick Start</a> · <a href="#installation">Installation</a> · <a href="#installer-cli">Installer CLI</a><br>
+  <b>Configure:</b> <a href="#configuration-reference">Reference</a> · <a href="#tls--https">TLS / HTTPS</a> · <a href="#token-budget">Token Budget</a><br>
+  <b>Use:</b> <a href="#client-mcp-wizard-beta">Client Wizard</a> · <a href="#connecting-ai-clients">AI Clients</a> · <a href="#example-prompts">Prompts</a> · <a href="#available-tools">Tools</a> · <a href="#common-parameters-get-methods">Parameters</a> · <a href="#pdf-reports-beta">PDF Reports</a><br>
+  <b>More:</b> <a href="#zabbix-compatibility">Compatibility</a> · <a href="#development">Development</a> · <a href="#related-projects">Related Projects</a> · <a href="#license">License</a> · <a href="#about-initmax">About initMAX</a>
 </p>
 
 <br>
