@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.22 - 2026-04-16
+
+### Fixed
+
+- **Availability report gauge was drawn as a near-full circle instead of a semicircle** - `_compute_gauge_arc_path()` in `reporting/engine.py` hard-coded the SVG large-arc-flag to `1` when the percentage exceeded 50. Since the swept angle is always in `[0°, 180°]`, the large-arc-flag must stay at `0`; setting it to `1` told the renderer to "take the long way round" and traced the lower semicircle instead of the upper one. The bug was visible on every availability PDF with uptime over 50% (i.e. almost every real report). Fixed so the arc now correctly progresses from left (0%) to right (100%) along the top edge of the gauge.
+- **Admin portal report preview had its own stale copy of the gauge arc calculation** - the preview handler in `admin/views/templates.py` inlined the same buggy arc math. Replaced with a direct call to the canonical `reporting.engine._compute_gauge_arc_path()` so there is now one source of truth; the preview automatically matches what `report_generate` produces.
+- **Admin portal report preview rendered empty sections for all capacity and backup templates** - the preview handler passed legacy variable names (`cpu_data`, `memory_data`, `disk_data`, `interfaces` at top level, `backup_matrix[*].results`) that no longer match what `reporting.data_fetcher` produces at runtime. Capacity Host iterates `metrics[*].rows[*].{endpoint, avg, min, max}`, Capacity Network iterates `hosts[*].interfaces[*].{name, bandwidth_mbps, cpu_avg, cpu_min, cpu_max}` plus a top-level `cpu_rows`, Backup iterates `backup_matrix[*].statuses[day]`. Preview sample data was rewritten to mirror the real runtime shape, so the preview modal now shows fully-populated tables with colored bars (green / yellow / red thresholds) and the backup success/fail matrix with ✓/✗ symbols instead of blank sections.
+
 ## v1.21 - 2026-04-16
 
 ### Security
