@@ -56,6 +56,7 @@ _REPORT_TEMPLATES = {
     "capacity_host": "capacity_host.html",
     "capacity_network": "capacity_network.html",
     "backup": "backup.html",
+    "showcase": "showcase.html",
 }
 
 
@@ -133,6 +134,7 @@ class ReportEngine:
         self.logo_path = logo_path
         self.company_name = company_name
         self.subtitle = subtitle
+        self._templates = dict(_REPORT_TEMPLATES)
 
         # Custom templates (uploaded via the admin portal) are rendered
         # in a SandboxedEnvironment to block Python-introspection RCE
@@ -237,7 +239,7 @@ class ReportEngine:
 
             # Store only the basename; FileSystemLoader will resolve it
             # against CUSTOM_TEMPLATE_DIR, never via absolute path.
-            _REPORT_TEMPLATES[key] = resolved.name
+            self._templates[key] = resolved.name
 
     def generate_report(self, report_type: str, data: dict, **options: object) -> bytes:
         """Generate a specific report type.
@@ -254,9 +256,9 @@ class ReportEngine:
             Extra key/value pairs merged into the template context
             (e.g. ``company_name``).
         """
-        template_file = _REPORT_TEMPLATES.get(report_type)
+        template_file = self._templates.get(report_type)
         if template_file is None:
-            available = ", ".join(sorted(_REPORT_TEMPLATES))
+            available = ", ".join(sorted(self._templates))
             raise ValueError(
                 f"Unknown report type '{report_type}'. Available: {available}"
             )

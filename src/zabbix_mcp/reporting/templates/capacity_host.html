@@ -17,6 +17,17 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="header">
+    <div class="header-left">
+        <div class="subtitle">{{ subtitle }}</div>
+    </div>
+    {% if logo_base64 %}
+    <div class="header-right">
+        <img src="{{ logo_base64 }}" alt="Logo">
+    </div>
+    {% endif %}
+</div>
+
 <h1>{{ company }} / Capacity Report</h1>
 
 <h2>General Information</h2>

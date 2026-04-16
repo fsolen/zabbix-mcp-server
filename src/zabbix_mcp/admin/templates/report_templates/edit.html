@@ -44,16 +44,6 @@
     <button class="editor-tab active" id="tab-visual" onclick="switchTab('visual')">&#x1F3A8; Visual Editor</button>
     <button class="editor-tab" id="tab-html" onclick="switchTab('html')">&#x1F4DD; HTML Code</button>
     <div style="flex:1;"></div>
-    <select class="form-select" style="width:auto; min-width:160px; padding:4px 28px 4px 8px; font-size:0.82rem;" onchange="insertVariable(this.value); this.selectedIndex=0;">
-        <option value="">Insert variable...</option>
-        <option value="{{ '{{' }} company {{ '}}' }}">company</option>
-        <option value="{{ '{{' }} subtitle {{ '}}' }}">subtitle</option>
-        <option value="{{ '{{' }} period_label {{ '}}' }}">period_label</option>
-        <option value="{{ '{{' }} hosts {{ '}}' }}">hosts</option>
-        <option value="{{ '{{' }} availability_pct {{ '}}' }}">availability_pct</option>
-        <option value="{{ '{{' }} generated_at {{ '}}' }}">generated_at</option>
-        <option value="{{ '{{' }} logo_base64 {{ '}}' }}">logo_base64</option>
-    </select>
     {% if ai_enabled %}
     <button class="btn btn-ghost btn-sm" onclick="openAiModal()" style="color: var(--color-primary);">&#x2728; Generate with AI</button>
     {% endif %}
@@ -81,32 +71,96 @@
 </form>
 
 {% if ai_enabled %}
-<!-- AI Generator Modal -->
+<!-- AI Generator Wizard Modal -->
 <div class="modal-overlay" id="ai-modal" style="display:none;">
-    <div class="modal-card" style="max-width:720px; max-height:90vh; display:flex; flex-direction:column;">
+    <div class="modal-card" style="max-width:780px; max-height:92vh; display:flex; flex-direction:column;">
         <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px;">
             <h3 style="margin:0;">&#x2728; Generate template with AI</h3>
             <button class="btn btn-ghost btn-sm" onclick="closeAiModal()">&times;</button>
         </div>
         <div style="padding:20px 24px; overflow-y:auto;">
             <p class="text-muted" style="margin-top:0; font-size:0.9rem;">
-                Describe the report you want in plain English. The AI assistant will generate
-                a Jinja2 template that plugs into the PDF report engine. You can iterate by
-                regenerating with a refined description.
+                Describe the report you want in plain English. The assistant will generate
+                a Jinja2 template that plugs into the PDF report engine. You can iterate
+                by regenerating with a refined description or editing the result directly.
             </p>
+
+            <!-- Quick-start templates. Pick one to prefill the textarea
+                 with a known-good prompt, then edit to taste. -->
+            <div class="form-group">
+                <label class="form-label">Quick-start</label>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('weekly')">📊 Weekly SRE review</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('capacity')">📈 Capacity report</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('incident')">🚨 Incident postmortem</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('exec')">👔 Executive summary</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('backup')">💾 Backup audit</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="aiQuickStart('')">Blank</button>
+                </div>
+            </div>
+
             <div class="form-group">
                 <label class="form-label" for="ai-request">Describe the report</label>
                 <textarea id="ai-request" class="form-textarea" rows="6" style="font-family: var(--font-sans);"
-                    placeholder="Example: Weekly SRE review report. Include: (1) a big availability gauge at the top, (2) a summary row with total hosts and total events, (3) a table of hosts sorted by event count descending, and (4) a list of the 3 top metrics (CPU / memory / disk) with color-coded bars. Company color: initMAX blue."></textarea>
+                    placeholder="Example: Weekly SRE review report. Include (1) a big availability gauge at the top, (2) a summary row with total hosts and total events, (3) a table of hosts sorted by event count descending, (4) color-coded CPU/memory/disk bars per host."></textarea>
                 <div class="form-hint">
-                    Provider: <code>{{ ai_provider }}</code>{% if ai_model %} &middot; Model: <code>{{ ai_model }}</code>{% endif %} &middot;
-                    Available context variables are documented in the prompt sent to the LLM; you do not need to list them.
+                    Available context variables are documented in the prompt sent to the LLM; you do not need to list them here.
                 </div>
             </div>
+
+            <!-- Provider picker - operator can use the server default
+                 (key in config.toml) or bring their own for this call.
+                 BYO keys stay in the browser tab; we only send them as
+                 part of the request and never persist. -->
+            <div class="form-group">
+                <label class="form-label">Provider</label>
+                <select id="ai-provider-select" class="form-select" onchange="aiProviderChanged()">
+                    {% if ai_server_configured %}
+                    <option value="server" selected>Server default ({{ ai_provider }}{% if ai_model %} / {{ ai_model }}{% endif %})</option>
+                    {% endif %}
+                    <option value="anthropic"{% if not ai_server_configured %} selected{% endif %}>Anthropic (paste your key)</option>
+                    <option value="openai">OpenAI (paste your key)</option>
+                    <option value="gemini">Google Gemini (paste your key)</option>
+                    <option value="azure-openai">Azure OpenAI (paste your key + deployment URL)</option>
+                    <option value="ollama">Ollama (self-hosted URL)</option>
+                    <option value="mistral">Mistral (paste your key)</option>
+                    <option value="groq">Groq (paste your key)</option>
+                    {% if not ai_server_configured %}
+                    <option value="server" disabled>Server default (not configured - set it in Settings)</option>
+                    {% endif %}
+                </select>
+                <div class="form-hint">
+                    {% if ai_server_configured %}
+                    "Server default" uses the provider and key saved in Settings (shared by all admins). Pick one of the other options to override just for this generation with your own key - it is never saved and stays only in this browser tab.
+                    {% else %}
+                    No server-side default is set up (configure it in Settings to share one key across admins). For this one-off generation, paste your provider's key below - it stays only in this browser tab. Ollama can be used without a key by pointing to a self-hosted endpoint.
+                    {% endif %}
+                </div>
+            </div>
+
+            <div id="ai-custom-provider" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label" for="ai-api-key">API key</label>
+                    <input type="password" id="ai-api-key" class="form-input" placeholder="sk-ant-... | sk-... | AIzaSy..." autocomplete="off" spellcheck="false">
+                    <div class="form-hint" id="ai-api-key-hint">Your provider's API key. Not stored - kept only in this browser tab. Leave blank for Ollama on an unauthenticated endpoint.</div>
+                </div>
+                <div class="form-group" id="ai-api-base-group" style="display:none;">
+                    <label class="form-label" for="ai-api-base">API base URL</label>
+                    <input type="text" id="ai-api-base" class="form-input" placeholder="https://my-resource.openai.azure.com/openai/deployments/gpt-5" autocomplete="off">
+                    <div class="form-hint" id="ai-api-base-hint">Required for Azure OpenAI (deployment URL) and custom Ollama hosts. Not stored.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="ai-model">Model (optional)</label>
+                    <input type="text" id="ai-model" class="form-input" placeholder="claude-sonnet-4-6 | gpt-5 | gemini-2.0-flash | llama3.2" autocomplete="off">
+                    <div class="form-hint">Leave empty for the provider's default.</div>
+                </div>
+            </div>
+
             <div id="ai-status" class="text-sm text-muted" style="min-height:20px; margin:8px 0;"></div>
             <div id="ai-error" class="alert alert-danger" style="display:none; padding:10px 14px; border-radius:var(--radius-md); background:rgba(239,68,68,0.1); border:1px solid var(--color-danger); color:var(--color-danger); font-size:0.85rem; margin-bottom:12px;"></div>
         </div>
-        <div style="padding:16px 24px; border-top:1px solid var(--border-color); display:flex; gap:8px; justify-content:flex-end;">
+        <div style="padding:16px 24px; border-top:1px solid var(--border-color); display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+            <span id="ai-progress" class="text-sm text-muted" style="margin-right:auto; display:none;">&#x231B; Contacting LLM...</span>
             <button class="btn btn-ghost" onclick="closeAiModal()">Cancel</button>
             <button class="btn btn-primary" id="ai-generate-btn" onclick="generateTemplateAI()">&#x2728; Generate</button>
         </div>
@@ -132,6 +186,9 @@
         <span class="text-muted">&#x25BC;</span>
     </div>
     <div class="variables-body">
+        <p class="text-muted" style="font-size:0.82rem; margin:0 0 10px;">
+            Tip: drag these as ready-made widgets from the <strong>Shortcuts</strong> category in the Visual Editor, or paste them into HTML mode.
+        </p>
         <div class="variable-item">
             <span class="variable-name">{{ '{{' }} company {{ '}}' }}</span>
             <span class="variable-desc">Company name from config</span>
@@ -189,7 +246,11 @@ var editor = grapesjs.init({
                 id: 'zabbix-header',
                 label: '&#x1F4CA; Report Header',
                 category: 'Zabbix',
-                content: '<div style="display:flex; justify-content:space-between; padding:20px; border-bottom:2px solid #e0e0e0;"><div><small style="color:#666;">IT Monitoring Service</small></div><div><img src="" alt="Logo" style="max-height:40px;"></div></div>'
+                // HTML-comment trick wraps the Jinja if-directive so
+                // GrapesJS does not mangle it when re-serializing. The
+                // src attribute is preserved verbatim; Jinja fills it
+                // in at report generation time.
+                content: '<div class="header" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #e0e0e0; padding-bottom:10px; margin-bottom:20px;"><div class="header-left"><div class="subtitle" style="font-size:9pt; color:#666;">{{ "{{" }} subtitle {{ "}}" }}</div></div><!--{{ "{%" }} if logo_base64 {{ "%}" }}--><div class="header-right"><img src="{{ "{{" }} logo_base64 {{ "}}" }}" alt="Logo" style="max-height:40px;"></div><!--{{ "{%" }} endif {{ "%}" }}--></div>'
             },
             {
                 id: 'zabbix-title',
@@ -207,19 +268,169 @@ var editor = grapesjs.init({
                 id: 'zabbix-host-table',
                 label: '&#x1F5A5; Host Table',
                 category: 'Zabbix',
-                content: '<table style="width:100%; border-collapse:collapse;"><thead><tr><th style="background:#d32f2f; color:white; padding:6px 8px;">Host</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Availability</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Events</th></tr></thead><tbody><tr><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.name {{ "}}" }}</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.availability_pct {{ "}}" }}%</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.event_count {{ "}}" }}</td></tr></tbody></table>'
+                content: '<table style="width:100%; border-collapse:collapse;"><thead><tr><th style="background:#d32f2f; color:white; padding:6px 8px;">Host</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Availability</th><th style="background:#d32f2f; color:white; padding:6px 8px;">Events</th></tr></thead><tbody><!--{{ "{%" }} for host in hosts {{ "%}" }}--><tr><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.name {{ "}}" }}</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.availability_pct {{ "}}" }}%</td><td style="padding:5px 8px; border-bottom:1px solid #e0e0e0;">{{ "{{" }} host.event_count {{ "}}" }}</td></tr><!--{{ "{%" }} endfor {{ "%}" }}--></tbody></table>'
             },
             {
                 id: 'zabbix-gauge',
                 label: '&#x1F4CA; SLA Gauge',
                 category: 'Zabbix',
-                content: '<div style="text-align:center; margin:20px 0;"><svg width="200" height="120" viewBox="0 0 200 120"><path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e0e0" stroke-width="12"/><path d="M 20 100 A 80 80 0 1 1 178 95" fill="none" stroke="#4caf50" stroke-width="12"/><text x="100" y="90" text-anchor="middle" font-size="28" font-weight="600">99.5%</text></svg></div>'
+                // Arc uses large-arc-flag=0 (v1.22 fix). The earlier block
+                // hard-coded 1 and drew the lower semicircle in the visual
+                // editor even though the runtime was correct.
+                content: '<div class="gauge-container" style="text-align:center; margin:20px 0;"><svg width="200" height="120" viewBox="0 0 200 120"><path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e0e0" stroke-width="12"/><path d="{{ "{{" }} gauge_arc_path {{ "}}" }}" fill="none" stroke="#4caf50" stroke-width="12" stroke-linecap="round"/><text x="100" y="90" text-anchor="middle" font-size="28" font-weight="600">{{ "{{" }} "%.2f"|format(availability_pct) {{ "}}" }}%</text><text x="20" y="115" font-size="10" fill="#666">0</text><text x="95" y="18" font-size="10" fill="#666">50</text><text x="170" y="115" font-size="10" fill="#666">100</text></svg></div>'
             },
             {
                 id: 'zabbix-graph',
                 label: '&#x1F4C8; Graph Placeholder',
                 category: 'Zabbix',
                 content: '<div style="text-align:center; padding:20px; background:#f5f5f5; border:2px dashed #ccc; margin:10px 0;"><p style="color:#999;">&#x1F4C8; Zabbix Graph</p><p style="font-size:0.8em; color:#bbb;">Graph will be rendered by graph_render tool</p></div>'
+            },
+            // Layout / structural widgets. Added in v1.23 so the visual
+            // editor can produce the same range of blocks as the AI
+            // generator reaches for.
+            {
+                id: 'zabbix-spacer-sm',
+                label: '&#x2195;&#xFE0F; Spacer (small)',
+                category: 'Layout',
+                content: '<div style="height:12px;"></div>'
+            },
+            {
+                id: 'zabbix-spacer-md',
+                label: '&#x2195;&#xFE0F; Spacer (medium)',
+                category: 'Layout',
+                content: '<div style="height:24px;"></div>'
+            },
+            {
+                id: 'zabbix-spacer-lg',
+                label: '&#x2195;&#xFE0F; Spacer (large)',
+                category: 'Layout',
+                content: '<div style="height:48px;"></div>'
+            },
+            {
+                id: 'zabbix-page-break',
+                label: '&#x1F4C4; Page Break',
+                category: 'Layout',
+                content: '<div class="page-break" style="page-break-before:always; break-before:page; border-top:2px dashed #d32f2f; margin:18px 0 4px; padding-top:4px; color:#d32f2f; font-size:0.7em; text-align:center;">&#x2702; new page</div>'
+            },
+            {
+                id: 'zabbix-two-col',
+                label: '&#x25A7; Two Columns',
+                category: 'Layout',
+                content: '<div style="display:flex; gap:16px; margin:12px 0;"><div style="flex:1; padding:12px; background:#fafafa; border:1px solid #eee;">Column 1</div><div style="flex:1; padding:12px; background:#fafafa; border:1px solid #eee;">Column 2</div></div>'
+            },
+            {
+                id: 'zabbix-three-col',
+                label: '&#x25A7;&#x25A7; Three Columns',
+                category: 'Layout',
+                content: '<div style="display:flex; gap:16px; margin:12px 0;"><div style="flex:1; padding:12px; background:#fafafa; border:1px solid #eee;">Column 1</div><div style="flex:1; padding:12px; background:#fafafa; border:1px solid #eee;">Column 2</div><div style="flex:1; padding:12px; background:#fafafa; border:1px solid #eee;">Column 3</div></div>'
+            },
+            {
+                id: 'zabbix-section-h2',
+                label: '&#x1F533; Section Heading (H2)',
+                category: 'Layout',
+                content: '<h2 style="font-family:Rubik,sans-serif; font-size:14pt; color:#222; margin:20px 0 10px; border-bottom:1px solid #e0e0e0; padding-bottom:4px;">Section Title</h2>'
+            },
+            {
+                id: 'zabbix-metric-card',
+                label: '&#x1F522; Metric Card',
+                category: 'Zabbix',
+                content: '<div class="metric-box" style="display:inline-block; padding:14px 20px; background:#fafafa; border:1px solid #e0e0e0; border-radius:6px; text-align:center; min-width:120px; margin:6px;"><div class="metric-value" style="font-size:24pt; font-weight:600; color:#222;">{{ "{{" }} total_events {{ "}}" }}</div><div class="metric-label" style="font-size:9pt; color:#666; margin-top:4px;">Events</div></div>'
+            },
+            {
+                id: 'zabbix-bar-green',
+                label: '&#x1F7E9; Progress Bar (low)',
+                category: 'Zabbix',
+                content: '<div style="display:flex; align-items:center; gap:8px;"><div style="flex:1; height:14px; background:#eee; border-radius:4px; overflow:hidden;"><div style="width:35%; height:100%; background:#4caf50;"></div></div><span>35%</span></div>'
+            },
+            {
+                id: 'zabbix-bar-yellow',
+                label: '&#x1F7E8; Progress Bar (medium)',
+                category: 'Zabbix',
+                content: '<div style="display:flex; align-items:center; gap:8px;"><div style="flex:1; height:14px; background:#eee; border-radius:4px; overflow:hidden;"><div style="width:72%; height:100%; background:#ff9800;"></div></div><span>72%</span></div>'
+            },
+            {
+                id: 'zabbix-bar-red',
+                label: '&#x1F7E5; Progress Bar (high)',
+                category: 'Zabbix',
+                content: '<div style="display:flex; align-items:center; gap:8px;"><div style="flex:1; height:14px; background:#eee; border-radius:4px; overflow:hidden;"><div style="width:92%; height:100%; background:#f44336;"></div></div><span>92%</span></div>'
+            },
+            {
+                id: 'zabbix-note',
+                label: '&#x1F4DD; Note / Callout',
+                category: 'Layout',
+                content: '<div style="padding:10px 14px; background:#fff8e1; border-left:4px solid #ffa000; margin:10px 0; font-size:0.9em;">&#x26A0; <strong>Note:</strong> Add your observation or recommendation here.</div>'
+            },
+            {
+                id: 'zabbix-host-loop',
+                label: '&#x1F504; Hosts Loop',
+                category: 'Zabbix',
+                content: '{{ "{%" }} for host in hosts {{ "%}" }}\n<div style="padding:8px 12px; border-bottom:1px solid #eee;">\n  <strong>{{ "{{" }} host.name {{ "}}" }}</strong> &mdash; {{ "{{" }} "%.2f"|format(host.availability_pct) {{ "}}" }}% uptime, {{ "{{" }} host.event_count {{ "}}" }} events\n</div>\n{{ "{%" }} endfor {{ "%}" }}'
+            },
+            // Shortcuts - quick-insert single-value variables and the
+            // uploaded logo. Each chip drops a span with the Jinja
+            // directive inline so the template renders the live value.
+            {
+                id: 'shortcut-logo',
+                label: '&#x1F5BC;&#xFE0F; Logo',
+                category: 'Shortcuts',
+                // Wrapped in a span so GrapesJS preserves both the
+                // opening AND closing HTML comments. A top-level
+                // leading comment gets dropped on append.
+                content: '<span style="display:inline-block;"><!--{{ "{%" }} if logo_base64 {{ "%}" }}--><img src="{{ "{{" }} logo_base64 {{ "}}" }}" alt="Logo" style="max-height:40px; display:inline-block;"><!--{{ "{%" }} endif {{ "%}" }}--></span>'
+            },
+            {
+                id: 'shortcut-company',
+                label: '&#x1F3E2; Company',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} company {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-subtitle',
+                label: '&#x1F4C4; Subtitle',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} subtitle {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-period-label',
+                label: '&#x1F4C5; Period',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} period_label {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-period-from',
+                label: '&#x1F553; Period From',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} period_from {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-period-to',
+                label: '&#x1F55B; Period To',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} period_to {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-availability-pct',
+                label: '&#x1F4C8; Availability %',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} "%.2f"|format(availability_pct) {{ "}}" }}%</span>'
+            },
+            {
+                id: 'shortcut-hosts-count',
+                label: '&#x1F5A5;&#xFE0F; Hosts count',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} hosts | length {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-events-count',
+                label: '&#x1F514; Events count',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} total_events {{ "}}" }}</span>'
+            },
+            {
+                id: 'shortcut-generated-at',
+                label: '&#x1F550; Generated at',
+                category: 'Shortcuts',
+                content: '<span>{{ "{{" }} generated_at {{ "}}" }}</span>'
             }
         ]
     }
@@ -227,12 +438,94 @@ var editor = grapesjs.init({
 
 // Load initial content
 var initialContent = document.getElementById('template-editor').value;
-if (initialContent) {
-    editor.setComponents(initialContent);
-}
+
+// Content with Jinja control flow (extends / block / for / if) gets
+// mangled when GrapesJS re-parses the HTML, because the HTML parser
+// moves text nodes out of elements that do not permit them (tbody
+// etc). For such content, keep the operator in HTML-source mode so
+// the template stays intact; operators can opt in to visual editing
+// after removing the control-flow constructs.
+{% raw %}function hasJinjaControlFlow(s) {
+    return /\{%\s*(extends|block|for|if|macro|include)\b/.test(s || '');
+}{% endraw %}
+{% raw %}if (initialContent) {
+    if (hasJinjaControlFlow(initialContent)) {
+        // Skip GrapesJS parse (it mangles {% for %} inside table/list
+        // elements). Show HTML mode directly with the original textarea
+        // content preserved verbatim - do NOT route through switchTab
+        // because that round-trips via editor.getHtml() which is empty.
+        document.getElementById('tab-visual').classList.remove('active');
+        document.getElementById('tab-html').classList.add('active');
+        document.getElementById('visual-editor').style.display = 'none';
+        document.getElementById('html-editor').style.display = 'block';
+    } else {
+        editor.setComponents(initialContent);
+    }
+}{% endraw %}
+
+// Open the Blocks panel by default so operators see available widgets
+editor.on('load', function() {
+    try {
+        var openBlocksBtn = editor.Panels.getButton('views', 'open-blocks');
+        if (openBlocksBtn) openBlocksBtn.set('active', true);
+    } catch (e) {}
+});
+
+// Add a "Use logo" button to every <img> component's toolbar so
+// operators can replace any image with the uploaded logo widget
+// without typing {{ logo_base64 }} by hand. Using a toolbar button
+// (rather than a trait) avoids GrapesJS image-component src
+// validation that strips non-URL values like Jinja placeholders.
+editor.on('component:selected', function(comp) {
+    if (!comp) return;
+    var el = comp.getEl && comp.getEl();
+    var isImg = (comp.get('type') === 'image') || (el && el.tagName === 'IMG');
+    if (!isImg) return;
+    var toolbar = comp.get('toolbar') || [];
+    var already = toolbar.filter(function(t){ return t && t.id === 'use-logo'; }).length;
+    if (already) return;
+    toolbar.push({
+        id: 'use-logo',
+        label: '🖼️',
+        attributes: { title: 'Replace with uploaded logo from config' },
+        command: 'zabbix-replace-with-logo'
+    });
+    comp.set('toolbar', toolbar);
+});
+
+editor.Commands.add('zabbix-replace-with-logo', {
+    run: function(ed) {
+        var sel = ed.getSelected();
+        if (!sel) return;
+        var parent = sel.parent();
+        var idx = sel.index();
+        sel.remove();
+        var logoBlock = ed.BlockManager.get('shortcut-logo');
+        if (!logoBlock) return;
+        parent.append(logoBlock.get('content'), { at: idx });
+    }
+});
 
 // Tab switching
 function switchTab(tab) {
+    if (tab === 'visual') {
+        // GrapesJS re-parses the HTML through a browser-style tree
+        // builder which moves nodes out of contexts where they are
+        // not allowed (for example a Jinja directive text node
+        // inside a tbody element). For templates with Jinja
+        // control flow, confirm with the operator first so they
+        // do not silently destroy working syntax.
+        var txt = document.getElementById('template-editor').value;
+        if (hasJinjaControlFlow(txt)) {
+            var ok = window.confirm(
+                'This template uses Jinja control flow (extends / block / for / if).\n' +
+                "Visual Editor will re-parse the HTML and may break constructs " +
+                "it does not understand (loops inside tables, ternaries, etc).\n\n" +
+                "Switch anyway? Click Cancel to keep editing as HTML."
+            );
+            if (!ok) return;
+        }
+    }
     document.getElementById('tab-visual').classList.toggle('active', tab === 'visual');
     document.getElementById('tab-html').classList.toggle('active', tab === 'html');
     document.getElementById('visual-editor').style.display = tab === 'visual' ? 'block' : 'none';
@@ -280,29 +573,19 @@ function renderPreview() {
     document.getElementById('preview-modal').style.display = 'flex';
     var form = new FormData();
     form.append('html_content', html);
-    fetch('/templates/preview', {method: 'POST', body: form})
+    var csrf = document.querySelector('meta[name="csrf-token"]');
+    form.append('csrf_token', csrf ? csrf.content : '');
+    fetch('/templates/preview', {
+        method: 'POST',
+        body: form,
+        headers: {'X-CSRF-Token': csrf ? csrf.content : ''},
+    })
         .then(function(r) { return r.text(); })
         .then(function(rendered) {
             var iframe = document.getElementById('preview-frame');
             var doc = iframe.contentDocument || iframe.contentWindow.document;
             doc.open(); doc.write(rendered); doc.close();
         });
-}
-
-// Insert variable at cursor (HTML mode only)
-function insertVariable(variable) {
-    if (!variable) return;
-    // If in visual mode, switch to HTML first
-    if (document.getElementById('visual-editor').style.display !== 'none') {
-        switchTab('html');
-    }
-    var textarea = document.getElementById('template-editor');
-    var start = textarea.selectionStart;
-    var end = textarea.selectionEnd;
-    var text = textarea.value;
-    textarea.value = text.substring(0, start) + variable + text.substring(end);
-    textarea.selectionStart = textarea.selectionEnd = start + variable.length;
-    textarea.focus();
 }
 
 // Ctrl+S / Cmd+S
@@ -329,18 +612,91 @@ function closeAiModal() {
     var m = document.getElementById('ai-modal');
     if (m) m.style.display = 'none';
 }
+
+// Pre-canned prompts. Picking one fills the textarea and the operator
+// can then refine before generating. Keeps starter templates in one
+// place so adding a new preset is a one-line change.
+var AI_QUICKSTARTS = {
+    'weekly': 'Weekly SRE review report. Start with a title "Weekly SRE Review" and the period (from - to). Then: (1) a large availability gauge showing overall uptime, (2) a summary row with metric cards for total hosts, total events, and average availability, (3) a table of all hosts sorted by event count descending, showing host name, availability percent, and event count, (4) a "Top Problems" section (loop over hosts with event_count > 0). Use initMAX blue as the primary color.',
+    'capacity': 'Capacity planning report covering CPU, memory, and disk utilization. Include: (1) title with company name and period, (2) per-metric tables iterating metrics[*].rows showing endpoint / avg / min / max with color-coded bars (green < 60, yellow < 85, red otherwise), (3) an "Attention needed" section flagging any row with avg > 85%. Add a page break before the attention section.',
+    'incident': 'Incident postmortem template for a single outage. Sections: (1) Executive summary (1-2 paragraphs placeholder), (2) Affected hosts table using the hosts list, (3) Timeline of events (use total_events count as context - leave a placeholder for manual timeline entry), (4) Impact metrics as big-number cards, (5) Remediation checklist. Serious tone, red accents for "affected" headers.',
+    'exec': 'One-page executive summary dashboard. Maximum 5 elements on the page: (1) Big availability gauge at top, (2) Three metric cards in a row: total hosts, total events, availability percent, (3) A single short table with the 5 hosts that had the most events, (4) A colored status banner: green "All systems operational" if availability > 99, yellow "Attention" if between 95 and 99, red "Degraded" below 95. Clean, professional, lots of white space.',
+    'backup': 'Backup audit report. Sections: (1) Title with period, (2) Summary metric cards: total hosts in backup matrix, total backup days, success percentage, (3) Full backup_matrix rendered as a hosts x days grid with green check / red X / dash for missing, (4) A "Failed backups" section listing any host/day pair where the status is False, (5) Recommendations placeholder. Use small fonts so the matrix fits.',
+};
+function aiQuickStart(key) {
+    var ta = document.getElementById('ai-request');
+    if (!ta) return;
+    ta.value = AI_QUICKSTARTS[key] || '';
+    ta.focus();
+}
+
+// Providers that require an `api_base` override (Azure OpenAI) and
+// providers where the key is optional (Ollama can be unauthenticated).
+var AI_PROVIDERS_NEED_BASE = ['azure-openai', 'ollama'];
+var AI_PROVIDERS_KEY_OPTIONAL = ['ollama'];
+
+function aiProviderChanged() {
+    var sel = document.getElementById('ai-provider-select');
+    var custom = document.getElementById('ai-custom-provider');
+    var baseGrp = document.getElementById('ai-api-base-group');
+    var keyHint = document.getElementById('ai-api-key-hint');
+    if (!sel || !custom) return;
+    var isServer = sel.value === 'server';
+    custom.style.display = isServer ? 'none' : 'block';
+    if (!isServer && baseGrp) {
+        baseGrp.style.display = AI_PROVIDERS_NEED_BASE.indexOf(sel.value) !== -1 ? 'block' : 'none';
+    }
+    if (!isServer && keyHint) {
+        if (AI_PROVIDERS_KEY_OPTIONAL.indexOf(sel.value) !== -1) {
+            keyHint.textContent = 'Optional for self-hosted Ollama (leave blank). Key is not stored.';
+        } else {
+            keyHint.textContent = "Your provider's API key. Not stored - kept only in this browser tab.";
+        }
+    }
+}
+
 function generateTemplateAI() {
     var req = document.getElementById('ai-request').value.trim();
     var err = document.getElementById('ai-error');
     var status = document.getElementById('ai-status');
+    var progress = document.getElementById('ai-progress');
     var btn = document.getElementById('ai-generate-btn');
     err.style.display = 'none';
     if (!req) {
-        err.textContent = 'Describe what you want first.';
+        err.textContent = 'Describe what you want first - use a quick-start or type your own.';
         err.style.display = 'block';
         return;
     }
+
+    // Build payload. Custom provider -> include user's key + (optional) model.
+    var payload = { request: req };
+    var providerSel = document.getElementById('ai-provider-select');
+    if (providerSel && providerSel.value !== 'server') {
+        var key = document.getElementById('ai-api-key').value.trim();
+        var keyOptional = AI_PROVIDERS_KEY_OPTIONAL.indexOf(providerSel.value) !== -1;
+        if (!key && !keyOptional) {
+            err.textContent = 'Pick a provider key first, or switch to server default.';
+            err.style.display = 'block';
+            return;
+        }
+        payload.provider = providerSel.value;
+        if (key) payload.api_key = key;
+        var model = document.getElementById('ai-model').value.trim();
+        if (model) payload.model = model;
+        var baseInput = document.getElementById('ai-api-base');
+        var baseVal = baseInput ? baseInput.value.trim() : '';
+        if (AI_PROVIDERS_NEED_BASE.indexOf(providerSel.value) !== -1) {
+            if (providerSel.value === 'azure-openai' && !baseVal) {
+                err.textContent = 'Azure OpenAI requires the deployment URL in API base URL.';
+                err.style.display = 'block';
+                return;
+            }
+            if (baseVal) payload.api_base = baseVal;
+        }
+    }
+
     btn.disabled = true;
+    if (progress) progress.style.display = 'inline';
     status.textContent = 'Generating... this usually takes 5-20 seconds.';
     var csrf = document.querySelector('meta[name="csrf-token"]');
     fetch('/templates/generate', {
@@ -349,26 +705,37 @@ function generateTemplateAI() {
             'Content-Type': 'application/json',
             'X-CSRF-Token': csrf ? csrf.content : '',
         },
-        body: JSON.stringify({request: req}),
+        body: JSON.stringify(payload),
     }).then(function(r) {
         return r.json().then(function(body) { return {status: r.status, body: body}; });
     }).then(function(resp) {
         btn.disabled = false;
+        if (progress) progress.style.display = 'none';
         if (resp.status !== 200) {
             status.textContent = '';
             err.textContent = (resp.body && resp.body.message) || ('Request failed: ' + resp.status);
             err.style.display = 'block';
             return;
         }
-        // Load generated HTML into the code editor and switch to the HTML tab.
+        // Load generated HTML into the code editor and force HTML
+        // mode WITHOUT round-tripping through GrapesJS. A naive
+        // setComponents + switchTab sequence would parse the Jinja
+        // control flow (extends, block, for, if, ternaries) through
+        // the HTML parser, mangle it, then sync the mangled output
+        // back into the textarea - breaking the generated template
+        // before the operator ever sees it.
         var html = resp.body.html || '';
         var ed = document.getElementById('template-editor');
         if (ed) ed.value = html;
-        if (typeof switchTab === 'function') switchTab('html');
+        document.getElementById('tab-visual').classList.remove('active');
+        document.getElementById('tab-html').classList.add('active');
+        document.getElementById('visual-editor').style.display = 'none';
+        document.getElementById('html-editor').style.display = 'block';
         status.textContent = 'Generated (' + resp.body.provider + ' / ' + resp.body.model +
-            ', ' + resp.body.elapsed_ms + ' ms, ' + html.length + ' chars). Close this dialog to edit.';
+            ', ' + resp.body.elapsed_ms + ' ms, ' + html.length + ' chars). Close to edit or regenerate.';
     }).catch(function(e) {
         btn.disabled = false;
+        if (progress) progress.style.display = 'none';
         status.textContent = '';
         err.textContent = 'Network error: ' + e;
         err.style.display = 'block';

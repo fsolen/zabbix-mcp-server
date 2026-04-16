@@ -94,11 +94,20 @@ class AdminAIConfig:
     config disables the feature cleanly (the UI button is hidden).
     """
 
-    provider: str = ""  # "anthropic" | "openai" | ""
-    api_key: str = ""  # supports ${ENV_VAR} expansion
+    enabled: bool = True  # admin-portal toggle; False hides the wizard even if keys are set
+    # Supported providers: anthropic | openai | gemini | azure-openai | ollama | mistral | groq
+    provider: str = ""
+    api_key: str = ""  # supports ${ENV_VAR} expansion; optional for Ollama
     model: str = ""  # empty = provider default (e.g. claude-sonnet-4-6)
+    # Custom endpoint for Ollama / Azure OpenAI / self-hosted deployments.
+    # Ignored for providers with a canonical API host.
+    api_base: str = ""
     max_tokens: int = 8000
-    timeout: int = 60
+    # Large reasoning models (Claude Opus, GPT-5) can take 90-150s for
+    # a full template; 60s was too aggressive and routinely timed out
+    # in the admin portal. 180s leaves headroom without making the UI
+    # wait forever on a truly stuck call.
+    timeout: int = 180
 
 
 @dataclass(frozen=True)
@@ -346,11 +355,13 @@ def load_config(path: str | Path) -> AppConfig:
     admin_raw = raw.get("admin", {}) or {}
     ai_raw = admin_raw.get("ai", {}) or {}
     admin_ai = AdminAIConfig(
+        enabled=bool(ai_raw.get("enabled", True)),
         provider=str(ai_raw.get("provider", "") or "").strip().lower(),
         api_key=str(ai_raw.get("api_key", "") or "").strip(),
         model=str(ai_raw.get("model", "") or "").strip(),
+        api_base=str(ai_raw.get("api_base", "") or "").strip(),
         max_tokens=int(ai_raw.get("max_tokens", 8000) or 8000),
-        timeout=int(ai_raw.get("timeout", 60) or 60),
+        timeout=int(ai_raw.get("timeout", 180) or 180),
     )
 
     return AppConfig(server=server_config, zabbix_servers=zabbix_servers, admin_ai=admin_ai)

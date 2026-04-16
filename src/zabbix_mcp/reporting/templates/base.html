@@ -153,17 +153,6 @@ tr:nth-child(even) td {
 </style>
 </head>
 <body>
-<div class="header">
-    <div class="header-left">
-        <div class="subtitle">{{ subtitle }}</div>
-    </div>
-    {% if logo_base64 %}
-    <div class="header-right">
-        <img src="{{ logo_base64 }}" alt="Logo">
-    </div>
-    {% endif %}
-</div>
-
 {% block content %}{% endblock %}
 </body>
 </html>

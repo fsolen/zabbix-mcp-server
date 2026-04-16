@@ -27,32 +27,63 @@ logger = logging.getLogger("zabbix_mcp.admin")
 
 CUSTOM_TEMPLATE_DIR = Path("/etc/zabbix-mcp/templates")
 
+def _validate_template_syntax(html_content: str) -> str | None:
+    """Return a user-facing error string if the template won't render.
+
+    Uses the same SandboxedEnvironment + sample context as the AI
+    validator so operators who hand-edit or paste templates get the
+    same guardrail the AI path already has. Returns None when the
+    template renders cleanly against sample data.
+    """
+    if not html_content.strip():
+        return None
+    try:
+        from zabbix_mcp.admin.ai_template import (
+            AITemplateValidationError,
+            validate_template,
+        )
+    except Exception:
+        # Reporting extras not installed - skip validation rather
+        # than block saves on a system that cannot render reports.
+        return None
+    try:
+        validate_template(html_content)
+        return None
+    except AITemplateValidationError as exc:
+        return str(exc)
+
+
 _BUILTIN_DESCRIPTIONS = {
     "availability": "Host availability with SLA gauge chart and events per host",
     "capacity_host": "CPU, memory, and disk usage per host",
     "capacity_network": "Network bandwidth and traffic per interface",
     "backup": "Daily backup success/fail matrix (hosts \u00d7 days)",
+    "showcase": "Showcase report - demonstrates every v1.23 visual editor widget (gauge, metric cards, bars, two/three columns, page breaks, note, hosts loop, backup matrix)",
 }
 
 
 def _ai_template_ctx(config) -> dict:
     """Return the {ai_enabled, ai_provider, ai_model} template context.
 
-    Read once per request so the edit.html template can decide whether
-    to show the "Generate with AI" button without re-importing the
-    module. Missing [admin.ai] section => all flags falsy.
+    "Enabled" in v1.23+ means "the UI button is available", which is
+    always True because the wizard supports bring-your-own-key - the
+    operator can paste their own Anthropic/OpenAI key right in the
+    dialog without touching config.toml. We surface the server-side
+    defaults so the dropdown can label the "Server default" option
+    with the configured provider/model, or "none" when the section
+    is missing.
     """
     try:
         from zabbix_mcp.admin.ai_template import is_ai_enabled
     except Exception:
-        return {"ai_enabled": False, "ai_provider": "", "ai_model": ""}
-    if not is_ai_enabled(config):
-        return {"ai_enabled": False, "ai_provider": "", "ai_model": ""}
+        is_ai_enabled = lambda c: False  # noqa: E731
     ai = getattr(config, "admin_ai", None)
+    server_configured = bool(is_ai_enabled(config))
     return {
         "ai_enabled": True,
-        "ai_provider": getattr(ai, "provider", "") or "",
-        "ai_model": getattr(ai, "model", "") or "",
+        "ai_server_configured": server_configured,
+        "ai_provider": (getattr(ai, "provider", "") or "") if server_configured else "",
+        "ai_model": (getattr(ai, "model", "") or "") if server_configured else "",
     }
 
 
@@ -172,6 +203,21 @@ async def template_create(request: Request) -> Response:
             **_ai_template_ctx(admin_app.config),
         })
 
+    # Validate Jinja syntax before write so we never ship a broken
+    # template into the templates directory (and then hit the same
+    # error on every preview/PDF attempt).
+    validation_error = _validate_template_syntax(html_content)
+    if validation_error:
+        return admin_app.render("report_templates/edit.html", request, {
+            "active": "templates",
+            "create_mode": True,
+            "error": f"Template will not render: {validation_error}",
+            "initial_content": html_content,
+            "initial_name": name,
+            "initial_description": description,
+            **_ai_template_ctx(admin_app.config),
+        })
+
     # Write HTML to file in writable location
     try:
         CUSTOM_TEMPLATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -235,6 +281,22 @@ async def template_edit(request: Request) -> Response:
         display_name = str(form.get("display_name", "")).strip()
         description = str(form.get("description", "")).strip()
         html_content = str(form.get("html_content", ""))
+
+        # Validate Jinja syntax before overwriting the saved file so a
+        # typo never replaces a working template with a broken one.
+        validation_error = _validate_template_syntax(html_content)
+        if validation_error:
+            return admin_app.render("report_templates/edit.html", request, {
+                "active": "templates",
+                "t": {
+                    "id": template_id,
+                    "name": display_name or tmpl["name"],
+                    "description": description,
+                },
+                "error": f"Template will not render: {validation_error}",
+                "initial_content": html_content,
+                **_ai_template_ctx(admin_app.config),
+            })
 
         # Update file
         try:
@@ -326,13 +388,34 @@ async def template_preview(request: Request) -> Response:
         pct = 99.5
         gauge_arc = _compute_gauge_arc_path(pct)
 
-        # Use initMAX logo as preview fallback
+        # Prefer the operator's uploaded logo (config.server.report_logo)
+        # so the preview matches what report_generate produces. Fall back
+        # to the bundled initMAX admin logo if nothing is configured or
+        # the configured file cannot be read.
         logo_fallback = None
-        logo_path = Path(__file__).parent.parent / "static" / "logo-horizontal-dark.svg"
-        if logo_path.exists():
-            logo_data = logo_path.read_bytes()
-            logo_b64 = base64.b64encode(logo_data).decode("ascii")
-            logo_fallback = f"data:image/svg+xml;base64,{logo_b64}"
+        configured_logo = getattr(admin_app.config.server, "report_logo", None)
+        if configured_logo:
+            configured_path = Path(configured_logo)
+            if configured_path.is_file() and not configured_path.is_symlink():
+                try:
+                    logo_data = configured_path.read_bytes()
+                    ext = configured_path.suffix.lower()
+                    mime = {
+                        ".svg": "image/svg+xml",
+                        ".png": "image/png",
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                    }.get(ext, "application/octet-stream")
+                    logo_b64 = base64.b64encode(logo_data).decode("ascii")
+                    logo_fallback = f"data:{mime};base64,{logo_b64}"
+                except OSError as exc:
+                    logger.warning("Preview logo read failed for %s: %s", configured_path, exc)
+        if logo_fallback is None:
+            logo_path = Path(__file__).parent.parent / "static" / "logo-horizontal-dark.svg"
+            if logo_path.exists():
+                logo_data = logo_path.read_bytes()
+                logo_b64 = base64.b64encode(logo_data).decode("ascii")
+                logo_fallback = f"data:image/svg+xml;base64,{logo_b64}"
 
         # Sample context for preview. The key names and nesting here
         # must mirror what `reporting.data_fetcher` produces at runtime,
@@ -424,7 +507,32 @@ async def template_preview(request: Request) -> Response:
         return HTMLResponse(rendered)
     except Exception as e:
         import html as _html
-        return HTMLResponse(f"<p style='color:red'>Template error: {_html.escape(str(e))}</p>")
+        # Full HTML document so the preview iframe renders the error
+        # in a readable card instead of a bare paragraph on white.
+        err_msg = _html.escape(str(e))
+        err_type = _html.escape(e.__class__.__name__)
+        return HTMLResponse(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<style>body{font-family:system-ui,Segoe UI,sans-serif;background:#fafafa;"
+            "color:#222;padding:24px;margin:0;}"
+            ".card{max-width:720px;margin:40px auto;padding:20px 24px;"
+            "background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
+            "box-shadow:0 2px 6px rgba(0,0,0,0.05);}"
+            ".card h2{margin:0 0 8px;color:#d32f2f;font-size:18px;}"
+            ".card code{background:#fff3e0;padding:2px 6px;border-radius:3px;"
+            "font-size:13px;}"
+            ".card p{line-height:1.45;margin:8px 0;}"
+            ".hint{color:#666;font-size:13px;margin-top:14px;}"
+            "</style></head><body>"
+            f"<div class='card'><h2>&#x26A0; Template rendering failed</h2>"
+            f"<p><strong>{err_type}:</strong></p>"
+            f"<p><code>{err_msg}</code></p>"
+            "<p class='hint'>Fix the Jinja syntax in the HTML Code tab and preview again. "
+            "Common causes: mismatched <code>{% if %}</code>/<code>{% endif %}</code>, "
+            "ternary written as <code>(x y z)</code> instead of <code>x if cond else z</code>, "
+            "or a loop variable used outside its <code>{% for %}</code> block.</p>"
+            "</div></body></html>"
+        )
 
 
 async def template_generate(request: Request) -> Response:
@@ -446,17 +554,32 @@ async def template_generate(request: Request) -> Response:
         return JSONResponse({"error": "forbidden"}, status_code=403)
 
     # Accept either application/json or application/x-www-form-urlencoded.
+    # Payload may also carry per-call provider overrides (provider, api_key,
+    # model) so operators can bring their own key without touching
+    # config.toml. The override is never logged or persisted.
     content_type = request.headers.get("content-type", "")
     user_request = ""
+    override_provider: str | None = None
+    override_api_key: str | None = None
+    override_model: str | None = None
+    override_api_base: str | None = None
     if content_type.startswith("application/json"):
         try:
             body = await request.json()
-            user_request = str(body.get("request", "") or "")
         except Exception:
             return JSONResponse({"error": "invalid_json"}, status_code=400)
+        user_request = str(body.get("request", "") or "")
+        override_provider = body.get("provider") or None
+        override_api_key = body.get("api_key") or None
+        override_model = body.get("model") or None
+        override_api_base = body.get("api_base") or None
     else:
         form = await request.form()
         user_request = str(form.get("request", "") or "")
+        override_provider = str(form.get("provider", "") or "") or None
+        override_api_key = str(form.get("api_key", "") or "") or None
+        override_model = str(form.get("model", "") or "") or None
+        override_api_base = str(form.get("api_base", "") or "") or None
 
     from zabbix_mcp.admin.ai_template import (
         AIDisabledError,
@@ -468,7 +591,14 @@ async def template_generate(request: Request) -> Response:
 
     client_ip = request.client.host if request.client else ""
     try:
-        result = generate_template(admin_app.config, user_request)
+        result = generate_template(
+            admin_app.config,
+            user_request,
+            override_provider=override_provider,
+            override_api_key=override_api_key,
+            override_model=override_model,
+            override_api_base=override_api_base,
+        )
     except AIDisabledError as exc:
         return JSONResponse(
             {"error": "ai_disabled", "message": str(exc)},
@@ -502,6 +632,11 @@ async def template_generate(request: Request) -> Response:
             details={
                 "provider": result.provider,
                 "model": result.model,
+                # Flag that the operator used their own key for this
+                # generation rather than the server-side config. The
+                # key itself is NEVER logged (it already never leaves
+                # this Python process, but double-check).
+                "byo_key": bool(override_api_key),
                 "request_chars": len(user_request),
                 "html_chars": len(result.html),
                 "elapsed_ms": result.elapsed_ms,

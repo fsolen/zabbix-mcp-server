@@ -177,6 +177,22 @@ rules strictly:
 7. Respond with ONLY the template body. No markdown code fences, no
    prose, no explanation. The first character of your response must be
    either `{` (for `{% extends %}`) or `<` (if you need a comment).
+
+8. CRITICAL Jinja syntax rules - violations here will make the
+   template refuse to render:
+   - Ternary: `{{ 'green' if x >= 99.9 else ('yellow' if x >= 97 else 'red') }}`.
+     NEVER write `{{ 'yellow' 97 'red' }}` or similar tuple-like forms.
+     Always use the full `A if cond else B` spelling, nested when needed.
+   - Loops: every `{% for x in seq %}...{% endfor %}` MUST surround the
+     element that uses `x`. Do NOT put the `{% for %}` block above an
+     empty line and then the loop body outside the block - Jinja will
+     raise UndefinedError for `x` on render. A `<tr>{{ x.name }}</tr>`
+     referencing `x` belongs BETWEEN the `{% for %}` and `{% endfor %}`,
+     never before or after.
+   - Conditionals: match `{% if %}` with `{% endif %}`, `{% else %}`
+     (not `{% elif %}...{% else %}{% endif %}` left unterminated).
+   - Do not emit empty `{% for %}{% endfor %}` or `{% if %}{% endif %}`
+     shells - the compiler accepts them but they never help.
 """
 
 
@@ -253,7 +269,7 @@ class AnthropicProvider:
     api_key: str
     model: str = "claude-sonnet-4-6"
     max_tokens: int = 8000
-    timeout: int = 60
+    timeout: int = 180
 
     def generate(self, system: str, user: str) -> str:
         payload = {
@@ -293,27 +309,164 @@ class AnthropicProvider:
 
 @dataclass(frozen=True)
 class OpenAIProvider:
-    """GPT (4o/5) via the Chat Completions API."""
+    """GPT (4o/5) via the Chat Completions API.
+
+    Also reused for OpenAI-compatible endpoints (Ollama, Mistral,
+    Groq) by passing a different ``base_url``. The wire format is
+    identical; the only thing that varies is the host.
+    """
 
     api_key: str
     model: str = "gpt-5"
     max_tokens: int = 8000
-    timeout: int = 60
+    timeout: int = 180
+    base_url: str = "https://api.openai.com/v1"
+    # Human-readable label for error messages (e.g. "OpenAI", "Ollama").
+    label: str = "OpenAI"
 
     def generate(self, system: str, user: str) -> str:
+        # Some OpenAI-compatible backends (Ollama, older forks)
+        # reject `max_completion_tokens` and only accept the legacy
+        # `max_tokens` key. Use the legacy key except for canonical
+        # OpenAI where the new one is required for gpt-5.
+        token_key = (
+            "max_completion_tokens"
+            if "api.openai.com" in self.base_url
+            else "max_tokens"
+        )
         payload = {
             "model": self.model,
-            "max_completion_tokens": self.max_tokens,
+            token_key: self.max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
         }
+        headers = {"content-type": "application/json"}
+        if self.api_key:
+            headers["authorization"] = f"Bearer {self.api_key}"
         req = urllib_request.Request(
-            "https://api.openai.com/v1/chat/completions",
+            self.base_url.rstrip("/") + "/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read())
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:500]
+            raise AIProviderError(f"{self.label} API returned {exc.code}: {body}") from exc
+        except URLError as exc:
+            raise AIProviderError(f"{self.label} API unreachable: {exc.reason}") from exc
+
+        choices = data.get("choices") or []
+        if not choices:
+            raise AIProviderError(
+                f"{self.label} API returned no choices: {json.dumps(data)[:300]}"
+            )
+        msg = (choices[0].get("message") or {}).get("content", "")
+        if not msg:
+            raise AIProviderError(f"{self.label} API returned empty content")
+        return msg
+
+
+@dataclass(frozen=True)
+class GeminiProvider:
+    """Google Gemini via the Generative Language v1beta REST API.
+
+    Request shape differs from the OpenAI/Anthropic APIs: Google
+    embeds the system prompt as ``systemInstruction`` and the user
+    message as ``contents[].parts[].text``. Auth is via the ``key``
+    query parameter.
+    """
+
+    api_key: str
+    model: str = "gemini-2.0-flash"
+    max_tokens: int = 8000
+    timeout: int = 180
+
+    def generate(self, system: str, user: str) -> str:
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": system}],
+            },
+            "contents": [
+                {"role": "user", "parts": [{"text": user}]},
+            ],
+            "generationConfig": {
+                "maxOutputTokens": self.max_tokens,
+            },
+        }
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
+        req = urllib_request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read())
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:500]
+            raise AIProviderError(f"Gemini API returned {exc.code}: {body}") from exc
+        except URLError as exc:
+            raise AIProviderError(f"Gemini API unreachable: {exc.reason}") from exc
+
+        candidates = data.get("candidates") or []
+        if not candidates:
+            raise AIProviderError(
+                f"Gemini API returned no candidates: {json.dumps(data)[:300]}"
+            )
+        parts = ((candidates[0].get("content") or {}).get("parts") or [])
+        text_pieces = [p.get("text", "") for p in parts if p.get("text")]
+        if not text_pieces:
+            raise AIProviderError(
+                f"Gemini API returned no text parts: {json.dumps(data)[:300]}"
+            )
+        return "".join(text_pieces)
+
+
+@dataclass(frozen=True)
+class AzureOpenAIProvider:
+    """Azure OpenAI Service via its deployment-scoped chat endpoint.
+
+    The operator must set ``api_base`` to the deployment URL, e.g.
+    ``https://my-resource.openai.azure.com/openai/deployments/gpt-5``.
+    Unlike vanilla OpenAI this uses the ``api-key`` header and
+    requires the ``api-version`` query parameter.
+    """
+
+    api_key: str
+    model: str = ""  # informational; Azure routes by deployment in URL
+    max_tokens: int = 8000
+    timeout: int = 180
+    base_url: str = ""
+    api_version: str = "2024-10-21"
+
+    def generate(self, system: str, user: str) -> str:
+        if not self.base_url:
+            raise AIProviderError(
+                "Azure OpenAI requires api_base set to the deployment URL "
+                "(https://{resource}.openai.azure.com/openai/deployments/{deployment})"
+            )
+        payload = {
+            "max_tokens": self.max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        url = self.base_url.rstrip("/") + f"/chat/completions?api-version={self.api_version}"
+        req = urllib_request.Request(
+            url,
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "authorization": f"Bearer {self.api_key}",
+                "api-key": self.api_key,
                 "content-type": "application/json",
             },
             method="POST",
@@ -323,19 +476,38 @@ class OpenAIProvider:
                 data = json.loads(resp.read())
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")[:500]
-            raise AIProviderError(f"OpenAI API returned {exc.code}: {body}") from exc
+            raise AIProviderError(f"Azure OpenAI API returned {exc.code}: {body}") from exc
         except URLError as exc:
-            raise AIProviderError(f"OpenAI API unreachable: {exc.reason}") from exc
+            raise AIProviderError(f"Azure OpenAI API unreachable: {exc.reason}") from exc
 
         choices = data.get("choices") or []
         if not choices:
             raise AIProviderError(
-                f"OpenAI API returned no choices: {json.dumps(data)[:300]}"
+                f"Azure OpenAI returned no choices: {json.dumps(data)[:300]}"
             )
         msg = (choices[0].get("message") or {}).get("content", "")
         if not msg:
-            raise AIProviderError("OpenAI API returned empty content")
+            raise AIProviderError("Azure OpenAI returned empty content")
         return msg
+
+
+# Provider registry: supported names + default model + default base_url.
+# Empty base_url means "use the provider's canonical hardcoded URL or
+# require the operator to supply api_base" (Azure). Empty model means
+# "fall back to provider's default" which get_provider resolves.
+PROVIDER_DEFAULTS: dict[str, tuple[str, str]] = {
+    # name: (default base_url, default model)
+    "anthropic": ("", "claude-sonnet-4-6"),
+    "openai": ("https://api.openai.com/v1", "gpt-5"),
+    "gemini": ("", "gemini-2.0-flash"),
+    "azure-openai": ("", ""),  # api_base + deployment name required
+    "ollama": ("http://localhost:11434/v1", "llama3.2"),
+    "mistral": ("https://api.mistral.ai/v1", "mistral-small-latest"),
+    "groq": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+}
+SUPPORTED_PROVIDERS = frozenset(PROVIDER_DEFAULTS.keys())
+# Providers where api_key may be empty (self-hosted with no auth).
+PROVIDERS_KEY_OPTIONAL = frozenset({"ollama"})
 
 
 def _resolve_env(value: str | None) -> str:
@@ -349,44 +521,113 @@ def _resolve_env(value: str | None) -> str:
 
 
 def is_ai_enabled(config: Any) -> bool:
-    """True when `[admin.ai]` is configured with a provider and key."""
-    ai = getattr(config, "admin_ai", None)
-    if ai is None:
-        return False
-    provider = (getattr(ai, "provider", "") or "").lower()
-    if provider not in {"anthropic", "openai"}:
-        return False
-    return bool(_resolve_env(getattr(ai, "api_key", "")))
+    """True when `[admin.ai]` is configured with a supported provider.
 
-
-def get_provider(config: Any) -> LLMProvider:
-    """Instantiate the configured provider.
-
-    Raises AIDisabledError when `[admin.ai]` is missing or incomplete
-    so the caller can return a clean 412 to the UI.
+    The explicit ``enabled`` flag (added in v1.24 so the admin portal
+    can expose a toggle) short-circuits to False when set to False.
+    Legacy configs without the flag default to enabled so upgrades
+    continue to work without touching config.toml. Providers that
+    allow unauthenticated access (Ollama) skip the API-key check.
     """
     ai = getattr(config, "admin_ai", None)
     if ai is None:
-        raise AIDisabledError("[admin.ai] section is missing from config.toml")
-    provider_name = (getattr(ai, "provider", "") or "").lower()
-    if provider_name not in {"anthropic", "openai"}:
-        raise AIDisabledError(
-            f"Unsupported [admin.ai].provider: '{provider_name}'. "
-            "Use 'anthropic' or 'openai'."
-        )
-    api_key = _resolve_env(getattr(ai, "api_key", ""))
-    if not api_key:
-        raise AIDisabledError(
-            "[admin.ai].api_key is not set (or env var is empty)"
-        )
-    model = getattr(ai, "model", "") or (
-        "claude-sonnet-4-6" if provider_name == "anthropic" else "gpt-5"
-    )
-    max_tokens = int(getattr(ai, "max_tokens", 0) or 8000)
-    timeout = int(getattr(ai, "timeout", 0) or 60)
+        return False
+    if getattr(ai, "enabled", True) is False:
+        return False
+    provider = (getattr(ai, "provider", "") or "").lower()
+    if provider not in SUPPORTED_PROVIDERS:
+        return False
+    if provider in PROVIDERS_KEY_OPTIONAL:
+        return True
+    return bool(_resolve_env(getattr(ai, "api_key", "")))
+
+
+def get_provider(
+    config: Any,
+    *,
+    override_provider: str | None = None,
+    override_api_key: str | None = None,
+    override_model: str | None = None,
+    override_api_base: str | None = None,
+) -> LLMProvider:
+    """Instantiate the configured provider.
+
+    When `override_provider` and `override_api_key` are both set, they
+    replace the server-side `[admin.ai]` config for this call. Used by
+    the "bring your own key" path in the admin portal AI wizard so an
+    operator can pick a different provider without restarting the
+    server or editing config.toml. Override keys are never persisted.
+
+    Raises AIDisabledError when neither the override nor the server
+    config is usable so the caller can return a clean 412 to the UI.
+    """
+    override_provider = (override_provider or "").strip().lower()
+    override_api_key = (override_api_key or "").strip()
+    override_model = (override_model or "").strip()
+    override_api_base = (override_api_base or "").strip()
+
+    ai_cfg = getattr(config, "admin_ai", None)
+    # Prefer the per-call override for api_base (Azure deployment URL
+    # or self-hosted Ollama endpoint) over the server-side default.
+    api_base_cfg = override_api_base or (getattr(ai_cfg, "api_base", "") or "").strip()
+
+    if override_provider or override_api_key:
+        # BYO path. Provider must be supported; key must be present
+        # unless the provider allows unauthenticated use (Ollama).
+        if override_provider not in SUPPORTED_PROVIDERS:
+            raise AIDisabledError(
+                f"Override provider must be one of {sorted(SUPPORTED_PROVIDERS)}, "
+                f"got '{override_provider}'"
+            )
+        if not override_api_key and override_provider not in PROVIDERS_KEY_OPTIONAL:
+            raise AIDisabledError("Override provider requires a non-empty API key")
+        provider_name = override_provider
+        api_key = override_api_key
+        model_cfg = override_model
+    else:
+        # Fall back to server-side [admin.ai] config.
+        if ai_cfg is None:
+            raise AIDisabledError("[admin.ai] section is missing from config.toml")
+        provider_name = (getattr(ai_cfg, "provider", "") or "").lower()
+        if provider_name not in SUPPORTED_PROVIDERS:
+            raise AIDisabledError(
+                f"Unsupported [admin.ai].provider: '{provider_name}'. "
+                f"Use one of {sorted(SUPPORTED_PROVIDERS)}."
+            )
+        api_key = _resolve_env(getattr(ai_cfg, "api_key", ""))
+        if not api_key and provider_name not in PROVIDERS_KEY_OPTIONAL:
+            raise AIDisabledError(
+                "[admin.ai].api_key is not set (or env var is empty)"
+            )
+        model_cfg = getattr(ai_cfg, "model", "") or ""
+
+    default_base, default_model = PROVIDER_DEFAULTS.get(provider_name, ("", ""))
+    model = model_cfg or default_model
+    base_url = api_base_cfg or default_base
+    max_tokens = int(getattr(ai_cfg, "max_tokens", 0) or 8000)
+    timeout = int(getattr(ai_cfg, "timeout", 0) or 180)
+
     if provider_name == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model, max_tokens=max_tokens, timeout=timeout)
-    return OpenAIProvider(api_key=api_key, model=model, max_tokens=max_tokens, timeout=timeout)
+    if provider_name == "gemini":
+        return GeminiProvider(api_key=api_key, model=model, max_tokens=max_tokens, timeout=timeout)
+    if provider_name == "azure-openai":
+        return AzureOpenAIProvider(
+            api_key=api_key, model=model, max_tokens=max_tokens, timeout=timeout,
+            base_url=base_url,
+        )
+    # openai + ollama + mistral + groq share the OpenAI wire format;
+    # only the base URL and default model differ.
+    labels = {
+        "openai": "OpenAI",
+        "ollama": "Ollama",
+        "mistral": "Mistral",
+        "groq": "Groq",
+    }
+    return OpenAIProvider(
+        api_key=api_key, model=model, max_tokens=max_tokens, timeout=timeout,
+        base_url=base_url, label=labels.get(provider_name, provider_name),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +750,21 @@ class GeneratedTemplate:
     elapsed_ms: int
 
 
-def generate_template(config: Any, user_request: str) -> GeneratedTemplate:
+def generate_template(
+    config: Any,
+    user_request: str,
+    *,
+    override_provider: str | None = None,
+    override_api_key: str | None = None,
+    override_model: str | None = None,
+    override_api_base: str | None = None,
+) -> GeneratedTemplate:
     """End-to-end: pick provider, call LLM, clean up output, validate.
+
+    Operators can override the server-configured provider for a single
+    call by passing `override_provider` + `override_api_key` (the
+    "bring your own key" path from the admin portal AI wizard). The
+    override key is not logged or persisted.
 
     The caller (admin view) is expected to wrap this in try/except and
     surface each concrete exception type as the appropriate HTTP
@@ -525,7 +779,13 @@ def generate_template(config: Any, user_request: str) -> GeneratedTemplate:
             "Request is too long (>4000 chars). Trim it to the essentials."
         )
 
-    provider = get_provider(config)
+    provider = get_provider(
+        config,
+        override_provider=override_provider,
+        override_api_key=override_api_key,
+        override_model=override_model,
+        override_api_base=override_api_base,
+    )
     system, user = build_prompt(user_request)
 
     t0 = time.monotonic()

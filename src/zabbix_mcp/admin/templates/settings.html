@@ -344,6 +344,107 @@
     </form>
 </div>
 
+<!-- Section 6: AI Template Generation -->
+<div class="settings-section">
+    <h2 class="settings-section-title">&#x2728; AI Template Generation</h2>
+    <div class="form-hint" style="margin-bottom:12px;">
+        Server-side default for the &ldquo;Generate with AI&rdquo; button on the report template editor.
+        Set a provider and key here so all admins share one configuration. If you leave the provider on
+        &ldquo;None&rdquo;, each admin has to paste their own key in the AI modal every time.
+    </div>
+    <form method="post" action="/settings/admin_ai">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="settings-row">
+            <div class="settings-label">Enabled</div>
+            <div>
+                <label class="toggle-label">
+                    <span class="toggle">
+                        <input type="checkbox" name="enabled" value="true" {% if settings.ai_enabled %}checked{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    Enable AI-assisted template generation
+                </label>
+                <div class="form-hint">When off, the &ldquo;Generate with AI&rdquo; button is hidden from the template editor even if a key is configured.</div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Provider</div>
+            <div>
+                <select name="provider" class="form-select" id="ai-provider-select" onchange="updateAiFieldVisibility()">
+                    <option value="">None - each admin pastes own key in modal</option>
+                    <option value="anthropic" {% if settings.ai_provider == 'anthropic' %}selected{% endif %}>Anthropic (Claude)</option>
+                    <option value="openai" {% if settings.ai_provider == 'openai' %}selected{% endif %}>OpenAI (GPT)</option>
+                    <option value="gemini" {% if settings.ai_provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
+                    <option value="azure-openai" {% if settings.ai_provider == 'azure-openai' %}selected{% endif %}>Azure OpenAI</option>
+                    <option value="ollama" {% if settings.ai_provider == 'ollama' %}selected{% endif %}>Ollama (self-hosted)</option>
+                    <option value="mistral" {% if settings.ai_provider == 'mistral' %}selected{% endif %}>Mistral</option>
+                    <option value="groq" {% if settings.ai_provider == 'groq' %}selected{% endif %}>Groq</option>
+                </select>
+                <div class="form-hint">Picking a provider preselects its default model and endpoint. Ollama allows empty API key for local unauthenticated setups.</div>
+            </div>
+        </div>
+        <div class="settings-row" id="ai-api-base-row">
+            <div class="settings-label">API Base URL</div>
+            <div>
+                <input type="text" name="api_base" id="ai-api-base-input" class="form-input" value="{{ settings.ai_api_base | default('') }}" placeholder="https://my-resource.openai.azure.com/openai/deployments/gpt-5">
+                <div class="form-hint" id="ai-api-base-hint">
+                    Required for Azure OpenAI (deployment URL) and self-hosted Ollama. Locked for providers with a canonical endpoint.
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">API Key</div>
+            <div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="password" name="api_key" class="form-input" value="" placeholder="{% if settings.ai_api_key_configured %}*** key configured (leave blank to keep){% else %}sk-ant-... or sk-...{% endif %}" autocomplete="off" spellcheck="false">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="var i=this.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password';">&#x1F441; Show</button>
+                </div>
+                <div class="form-hint">
+                    {% if settings.ai_api_key_configured %}
+                    A key is already stored. Leave this field blank to keep it, or paste a new one to rotate.
+                    {% else %}
+                    Paste your Anthropic or OpenAI API key. Stored in <code>[admin.ai].api_key</code> with file permissions <code>0600</code>.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Model</div>
+            <div>
+                <input type="text" name="model" class="form-input" value="{{ settings.ai_model | default('') }}" placeholder="claude-sonnet-4-6 | gpt-5 | gemini-2.0-flash | llama3.2">
+                <div class="form-hint" id="ai-model-hint">Leave empty for the provider's default. Provider defaults: Anthropic <code>claude-sonnet-4-6</code>, OpenAI <code>gpt-5</code>, Gemini <code>gemini-2.0-flash</code>, Ollama <code>llama3.2</code>, Mistral <code>mistral-small-latest</code>, Groq <code>llama-3.3-70b-versatile</code>.</div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Timeout (seconds)</div>
+            <div>
+                <div class="number-input-group">
+                    <button type="button" class="num-btn num-minus">&minus;</button>
+                    <input type="number" name="timeout" value="{{ settings.ai_timeout | default(180) }}" min="30" max="600" step="30">
+                    <button type="button" class="num-btn num-plus">+</button>
+                </div>
+                <div class="form-hint">How long to wait for the LLM to respond before giving up. Default 180 s. Large reasoning models (Claude Opus, GPT-5) regularly need 90-150 s for a full template; bump to 300 s if you keep hitting "read operation timed out".</div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Max tokens</div>
+            <div>
+                <div class="number-input-group">
+                    <button type="button" class="num-btn num-minus">&minus;</button>
+                    <input type="number" name="max_tokens" value="{{ settings.ai_max_tokens | default(8000) }}" min="1000" max="32000" step="1000">
+                    <button type="button" class="num-btn num-plus">+</button>
+                </div>
+                <div class="form-hint">Upper bound on the template length the LLM may produce. Default 8000 is enough for a full A4 report; raise only if generated output gets cut off.</div>
+            </div>
+        </div>
+        {% if current_user_role == 'admin' %}
+        <div style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary btn-sm">Save AI Settings</button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
 <!-- Hidden upload forms (outside all section forms to avoid nesting) -->
 <form id="upload-logo-form" method="post" action="/settings/upload/logo" enctype="multipart/form-data" style="display:none;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"></form>
@@ -524,5 +625,42 @@ function filterToolBubbles(q) {
 }
 
 renderBubbles();
+
+// AI provider -> lock/unlock the API base URL field. Canonical-endpoint
+// providers (Anthropic, OpenAI, Gemini, Mistral, Groq) hardcode the
+// URL in the client, so leaving the field editable would be misleading.
+// Azure OpenAI and Ollama both require an operator-supplied URL.
+var AI_PROVIDERS_BASE_EDITABLE = {
+    'azure-openai': { required: true, placeholder: 'https://my-resource.openai.azure.com/openai/deployments/gpt-5' },
+    'ollama': { required: false, placeholder: 'http://localhost:11434/v1' },
+};
+
+function updateAiFieldVisibility() {
+    var sel = document.getElementById('ai-provider-select');
+    var input = document.getElementById('ai-api-base-input');
+    var hint = document.getElementById('ai-api-base-hint');
+    if (!sel || !input) return;
+    var cfg = AI_PROVIDERS_BASE_EDITABLE[sel.value];
+    if (cfg) {
+        input.disabled = false;
+        input.readOnly = false;
+        input.placeholder = cfg.placeholder;
+        if (hint) {
+            hint.textContent = cfg.required
+                ? 'Required: deployment URL for your Azure OpenAI resource.'
+                : 'Optional: override if your Ollama runs on a non-default host or port.';
+        }
+    } else {
+        // Provider uses a hardcoded endpoint - clear any stale override
+        // so the save payload does not carry an unused api_base.
+        input.value = '';
+        input.disabled = true;
+        input.readOnly = true;
+        input.placeholder = 'Not applicable for this provider';
+        if (hint) hint.textContent = 'This provider uses a canonical endpoint; the field is locked.';
+    }
+}
+
+updateAiFieldVisibility();
 </script>
 {% endblock %}

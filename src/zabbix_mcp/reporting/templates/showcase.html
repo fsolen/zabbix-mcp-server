@@ -1,0 +1,192 @@
+{#
+  Zabbix MCP Server
+  Copyright (C) 2026 initMAX s.r.o.
+
+  This program is free software: you can redistribute it and/or modify it under
+  the terms of the GNU Affero General Public License as published by the Free
+  Software Foundation, version 3.
+#}
+{% extends "base.html" %}
+
+{% block content %}
+<div class="header">
+    <div class="header-left">
+        <div class="subtitle">{{ subtitle }}</div>
+    </div>
+    {% if logo_base64 %}
+    <div class="header-right">
+        <img src="{{ logo_base64 }}" alt="Logo">
+    </div>
+    {% endif %}
+</div>
+
+<h1>{{ company }} / Showcase Report</h1>
+<h2>Every widget in one report</h2>
+
+<table class="info-table">
+    <tr><th>Company</th><td>{{ company }}</td></tr>
+    <tr><th>Report Type</th><td>Showcase (all widgets)</td></tr>
+    <tr><th>Report Period</th><td>{{ period_from }} &mdash; {{ period_to }}</td></tr>
+    <tr><th>Generated</th><td>{{ generated_at }}</td></tr>
+</table>
+
+<div style="height: 24px;"></div>
+
+<h2>Overall Availability</h2>
+<div class="gauge-container">
+    <svg width="200" height="120" viewBox="0 0 200 120">
+        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e0e0" stroke-width="12"/>
+        {% if availability_pct > 0 %}
+        <path d="{{ gauge_arc_path }}" fill="none" stroke="#4caf50" stroke-width="12" stroke-linecap="round"/>
+        {% endif %}
+        <text x="100" y="90" text-anchor="middle" font-size="28" font-weight="600" fill="#333">{{ "%.2f"|format(availability_pct) }}%</text>
+        <text x="20" y="115" font-size="10" fill="#666">0</text>
+        <text x="95" y="18" font-size="10" fill="#666">50</text>
+        <text x="170" y="115" font-size="10" fill="#666">100</text>
+    </svg>
+</div>
+
+<h2>Summary Metrics</h2>
+<div style="text-align: center; margin: 20px 0;">
+    <div class="metric-box">
+        <div class="metric-value">{{ hosts | length }}</div>
+        <div class="metric-label">Hosts</div>
+    </div>
+    <div class="metric-box">
+        <div class="metric-value">{{ total_events }}</div>
+        <div class="metric-label">Events</div>
+    </div>
+    <div class="metric-box">
+        <div class="metric-value">{{ "%.1f"|format(availability_pct) }}%</div>
+        <div class="metric-label">Uptime</div>
+    </div>
+</div>
+
+<div style="height: 12px;"></div>
+
+<h2>Two-Column Section</h2>
+<div style="display: flex; gap: 20px; margin: 10px 0;">
+    <div style="flex: 1;">
+        <h3>Left column</h3>
+        <p>This demonstrates the <strong>Two Columns</strong> layout widget - ideal for side-by-side comparisons such as "current" vs "previous" period, or summary vs detail views.</p>
+    </div>
+    <div style="flex: 1;">
+        <h3>Right column</h3>
+        <p>Per-host detail lives on the right. Use it to put a small host table, a per-host gauge, or a sparkline next to the overview.</p>
+    </div>
+</div>
+
+<h2>Three-Column Section</h2>
+<div style="display: flex; gap: 20px; margin: 10px 0;">
+    <div style="flex: 1;"><h3>Network</h3><p>Uplink usage, peaks, errors.</p></div>
+    <div style="flex: 1;"><h3>Storage</h3><p>Backup matrix + volume health.</p></div>
+    <div style="flex: 1;"><h3>Compute</h3><p>CPU/Memory/Disk bars.</p></div>
+</div>
+
+<div style="background: #e7f3ff; border-left: 4px solid #2196f3; padding: 10px 15px; margin: 10px 0; font-size: 9pt;">
+    <strong>Note:</strong> This report is a showcase of every block that ships with the v1.23 visual editor. Duplicate it and replace sections you do not need.
+</div>
+
+<div class="page-break"></div>
+
+<h2>Host Availability Table</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Host</th>
+            <th>Event Count</th>
+            <th>Average Availability</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for host in hosts %}
+        <tr>
+            <td>{{ host.name }}</td>
+            <td>{{ host.event_count }}</td>
+            <td>{{ "%.2f"|format(host.availability_pct) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Capacity Bars</h2>
+{% for metric in metrics %}
+<h3>{{ metric.label }}</h3>
+<table>
+    <thead>
+        <tr><th>Host</th><th>Avg</th><th>Min</th><th>Max</th><th style="width:35%">Usage</th></tr>
+    </thead>
+    <tbody>
+        {% for row in metric.rows %}
+        <tr>
+            <td>{{ row.endpoint }}</td>
+            <td>{{ "%.1f"|format(row.avg) }}%</td>
+            <td>{{ "%.1f"|format(row.min) }}%</td>
+            <td>{{ "%.1f"|format(row.max) }}%</td>
+            <td>
+                <div class="bar">
+                    <div class="bar-fill {% if row.avg < 60 %}green{% elif row.avg < 85 %}yellow{% else %}red{% endif %}" style="width: {{ row.avg }}%;"></div>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endfor %}
+
+<div style="height: 24px;"></div>
+
+<h2>Hosts Loop (inline style)</h2>
+{% for host in hosts %}
+<div style="padding: 8px 12px; border-bottom: 1px solid #eee;">
+    <strong>{{ host.name }}</strong> &mdash; {{ "%.2f"|format(host.availability_pct) }}% uptime, {{ host.event_count }} events
+</div>
+{% endfor %}
+
+<div class="page-break"></div>
+
+<h2>Backup Matrix</h2>
+<table style="font-size: 8pt;">
+    <thead>
+        <tr>
+            <th>Host</th>
+            {% for day in days %}<th style="text-align: center; padding: 4px;">{{ day }}</th>{% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in backup_matrix %}
+        <tr>
+            <td style="font-weight: 600;">{{ row.host }}</td>
+            {% for day in days %}
+                {% set s = row.statuses.get(day) %}
+                <td style="text-align: center; padding: 4px;">
+                    {% if s is none %}<span style="color:#bbb;">-</span>
+                    {% elif s %}<span class="check">&#10003;</span>
+                    {% else %}<span class="cross">&#10007;</span>{% endif %}
+                </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Network Interfaces</h2>
+{% for host in hosts %}
+<h3>{{ host.name }}</h3>
+<table>
+    <thead>
+        <tr><th>Interface</th><th>Bandwidth</th><th>CPU avg</th><th>CPU max</th></tr>
+    </thead>
+    <tbody>
+        {% for iface in host.interfaces %}
+        <tr>
+            <td>{{ iface.name }}</td>
+            <td>{{ "%.0f"|format(iface.bandwidth_mbps) }} Mbps</td>
+            <td>{{ "%.1f"|format(iface.cpu_avg) }}%</td>
+            <td>{{ "%.1f"|format(iface.cpu_max) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endfor %}
+{% endblock %}

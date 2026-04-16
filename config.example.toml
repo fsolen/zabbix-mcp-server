@@ -330,11 +330,18 @@ port = 9090
 # API endpoint.
 
 # [admin.ai]
-# provider = "anthropic"                   # "anthropic" | "openai"
-# api_key = "${ANTHROPIC_API_KEY}"         # ${ENV_VAR} expansion supported
+# enabled = true                           # toggle from the admin portal; false hides the button
+# provider = "anthropic"                   # "anthropic" | "openai" | "gemini" | "azure-openai" | "ollama" | "mistral" | "groq"
+# api_key = "${ANTHROPIC_API_KEY}"         # ${ENV_VAR} expansion supported; optional for Ollama
 # model = "claude-sonnet-4-6"              # provider-specific; leave empty for provider default
+# api_base = ""                            # required for Azure (deployment URL) and custom Ollama; empty for canonical endpoints
 # max_tokens = 8000                        # generation cap; ~2-3k usually suffices
-# timeout = 60                             # seconds; raise for slow networks
+# timeout = 180                            # seconds; large reasoning models (Opus, GPT-5) need 90-150 s
+#
+# Same fields are editable in the admin portal under
+# Settings -> AI Template Generation, including a "Show" button for
+# the masked API key and per-provider field locking (API Base URL is
+# disabled for providers with a canonical endpoint).
 
 # ---------------------------------------------------------------------------
 # MCP Tokens (multi-token authentication)

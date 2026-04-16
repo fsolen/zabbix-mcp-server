@@ -56,7 +56,21 @@ SECTION_CONFIG = {
         "allowed_keys": {"enabled", "port"},
         "min_role": "admin",
     },
+    # [admin.ai] - optional sub-table driving the "Generate with AI"
+    # button on the report template editor. Leaving api_key blank in
+    # the form is treated as "keep existing" so the operator does not
+    # have to paste their key every save.
+    "admin_ai": {
+        "toml_section": "admin.ai",
+        "allowed_keys": {"enabled", "provider", "api_key", "model", "api_base", "timeout", "max_tokens"},
+        "min_role": "admin",
+    },
 }
+
+# Keys that must not be cleared when the submitted value is empty.
+# The settings UI sends "" for api_key when the operator does not want
+# to rotate the stored secret; treat that as "keep current value".
+SECRET_KEEP_EMPTY = {"api_key"}
 
 
 async def settings_view(request: Request) -> Response:
@@ -90,6 +104,22 @@ async def settings_view(request: Request) -> Response:
             # Admin fields — prefix to avoid collision (both have "port")
             settings["admin_enabled"] = admin_cfg.get("enabled", False)
             settings["admin_port"] = admin_cfg.get("port", 9090)
+
+            # [admin.ai] sub-table. We expose the provider, model,
+            # and enabled flag verbatim, but never the raw api_key -
+            # instead we just report whether one is configured so the
+            # UI can display "Key configured" without leaking it.
+            ai_cfg = dict(admin_cfg.get("ai", {})) if isinstance(admin_cfg.get("ai"), dict) else {}
+            # Default True matches AdminAIConfig.enabled so legacy
+            # configs without the flag continue to show the feature as
+            # enabled in the UI.
+            settings["ai_enabled"] = bool(ai_cfg.get("enabled", True))
+            settings["ai_provider"] = ai_cfg.get("provider", "")
+            settings["ai_model"] = ai_cfg.get("model", "")
+            settings["ai_api_base"] = ai_cfg.get("api_base", "")
+            settings["ai_api_key_configured"] = bool(ai_cfg.get("api_key"))
+            settings["ai_timeout"] = int(ai_cfg.get("timeout") or 180)
+            settings["ai_max_tokens"] = int(ai_cfg.get("max_tokens") or 8000)
         except Exception as e:
             logger.error("Failed to read config: %s", e)
 
@@ -125,12 +155,17 @@ async def settings_update(request: Request) -> Response:
 
     try:
         doc = load_config_document(admin_app.config_path)
+        import tomlkit
 
-        if config_section_name not in doc:
-            import tomlkit
-            doc.add(config_section_name, tomlkit.table())
-
-        config_section = doc[config_section_name]
+        # Support dotted section names (e.g. "admin.ai" for nested
+        # TOML sub-tables) by walking the path and creating missing
+        # tables as we go.
+        parts = config_section_name.split(".")
+        config_section = doc
+        for i, part in enumerate(parts):
+            if part not in config_section:
+                config_section.add(part, tomlkit.table())
+            config_section = config_section[part]
 
         needs_restart = False
 
@@ -152,6 +187,11 @@ async def settings_update(request: Request) -> Response:
             elif key in form:
                 value = str(form.get(key, "")).strip()
                 if value == "":
+                    # Secrets like api_key: blank form value means
+                    # "don't touch the stored value" so the operator
+                    # does not have to re-paste the key on every save.
+                    if key in SECRET_KEEP_EMPTY:
+                        continue
                     new_value = None
                     if key in config_section:
                         del config_section[key]
