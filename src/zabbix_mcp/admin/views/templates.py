@@ -291,13 +291,14 @@ async def template_preview(request: Request) -> Response:
             loader=FileSystemLoader(str(TEMPLATE_DIR)),
         )
         template = env.from_string(html_content)
-        import math
+        # Reuse the canonical arc helper from the reporting engine so the
+        # preview matches what `report_generate` produces. The inline
+        # copy that used to live here had large-arc-flag=1 hard-coded,
+        # which drew the lower semicircle for percentage values anyway
+        # near 100%. Fixed in v1.21; keep a single source of truth.
+        from zabbix_mcp.reporting.engine import _compute_gauge_arc_path
         pct = 99.5
-        angle_deg = 180.0 - (pct / 100.0) * 180.0
-        angle_rad = math.radians(angle_deg)
-        end_x = 100.0 + 80.0 * math.cos(angle_rad)
-        end_y = 100.0 - 80.0 * math.sin(angle_rad)
-        gauge_arc = f"M 20 100 A 80 80 0 1 1 {end_x:.1f} {end_y:.1f}"
+        gauge_arc = _compute_gauge_arc_path(pct)
 
         # Use initMAX logo as preview fallback
         logo_fallback = None
@@ -307,6 +308,17 @@ async def template_preview(request: Request) -> Response:
             logo_b64 = base64.b64encode(logo_data).decode("ascii")
             logo_fallback = f"data:image/svg+xml;base64,{logo_b64}"
 
+        # Sample context for preview. The key names and nesting here
+        # must mirror what `reporting.data_fetcher` produces at runtime,
+        # otherwise the preview renders empty sections (capacity + backup
+        # reports iterate over `metrics` / `backup_matrix` with specific
+        # shapes). Kept in sync with `fetch_capacity_host_data` /
+        # `fetch_capacity_network_data` / `fetch_backup_data`.
+        sample_days = list(range(1, 32))
+        sample_statuses = {d: True for d in sample_days}
+        # Mark a few days as failed so the preview shows the red cells.
+        for d in (7, 14, 22):
+            sample_statuses[d] = False
         rendered = template.render(
             company="Sample Company",
             subtitle="IT Monitoring Service",
@@ -319,15 +331,69 @@ async def template_preview(request: Request) -> Response:
             period_from="2026-01-01",
             period_to="2026-01-31",
             period_label="01/2026",
+            # `hosts` covers availability AND capacity_network (the latter
+            # iterates host.interfaces). We attach interfaces to every
+            # host; availability.html ignores them, capacity_network.html
+            # uses them.
             hosts=[
-                {"name": "host-01", "host": "host-01", "availability_pct": 100.0, "event_count": 0},
-                {"name": "host-02", "host": "host-02", "availability_pct": 98.5, "event_count": 3},
+                {
+                    "name": "host-01", "host": "host-01",
+                    "availability_pct": 100.0, "event_count": 0,
+                    "interfaces": [
+                        {"name": "eth0", "bandwidth_mbps": 1000.0, "cpu_avg": 12.5, "cpu_min": 2.0, "cpu_max": 34.1},
+                        {"name": "eth1", "bandwidth_mbps": 100.0, "cpu_avg": 68.2, "cpu_min": 30.0, "cpu_max": 92.0},
+                    ],
+                },
+                {
+                    "name": "host-02", "host": "host-02",
+                    "availability_pct": 98.5, "event_count": 3,
+                    "interfaces": [
+                        {"name": "eth0", "bandwidth_mbps": 10000.0, "cpu_avg": 91.4, "cpu_min": 80.0, "cpu_max": 97.0},
+                    ],
+                },
             ],
-            cpu_data=[{"host": "host-01", "avg": 15.2, "min": 2.1, "max": 78.5}],
-            memory_data=[{"host": "host-01", "avg": 45.0, "min": 30.0, "max": 82.0}],
-            disk_data=[{"host": "host-01", "avg": 55.0, "min": 40.0, "max": 70.0}],
-            days=list(range(1, 31)),
-            backup_matrix=[{"host": "host-01", "results": {d: True for d in range(1, 31)}}],
+            # capacity_network.html renders `cpu_rows` as a standalone
+            # block above the per-host interface breakdown.
+            cpu_rows=[
+                {"endpoint": "host-01", "avg": 15.2, "min": 2.1, "max": 78.5},
+                {"endpoint": "host-02", "avg": 63.4, "min": 40.0, "max": 95.1},
+            ],
+            landline_count=2,
+            # capacity_host.html iterates `metrics[*].label` and each row
+            # has `endpoint/avg/min/max`. Three metrics cover the bar-color
+            # ranges (< 60 green, < 85 yellow, else red) so every color
+            # path is exercised in the preview.
+            metrics=[
+                {
+                    "label": "CPU Usage (%)",
+                    "rows": [
+                        {"endpoint": "host-01", "avg": 15.2, "min": 2.1, "max": 78.5},
+                        {"endpoint": "host-02", "avg": 63.4, "min": 40.0, "max": 95.1},
+                    ],
+                },
+                {
+                    "label": "Memory Usage (%)",
+                    "rows": [
+                        {"endpoint": "host-01", "avg": 45.0, "min": 30.0, "max": 82.0},
+                        {"endpoint": "host-02", "avg": 88.5, "min": 70.0, "max": 97.0},
+                    ],
+                },
+                {
+                    "label": "Disk Usage (%)",
+                    "rows": [
+                        {"endpoint": "host-01", "avg": 55.0, "min": 40.0, "max": 70.0},
+                        {"endpoint": "host-02", "avg": 91.0, "min": 80.0, "max": 98.0},
+                    ],
+                },
+            ],
+            # backup.html iterates days (list of ints) × backup_matrix rows.
+            # Each row is {host, statuses: {day_int: True|False|None}}.
+            days=sample_days,
+            backup_matrix=[
+                {"host": "host-01", "statuses": sample_statuses},
+                {"host": "host-02", "statuses": {d: (d % 3 != 0) for d in sample_days}},
+                {"host": "host-03", "statuses": {d: True for d in sample_days}},
+            ],
         )
         return HTMLResponse(rendered)
     except Exception as e:

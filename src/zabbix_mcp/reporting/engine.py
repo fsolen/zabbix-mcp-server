@@ -64,15 +64,22 @@ def _compute_gauge_arc_path(percentage: float) -> str:
 
     The gauge spans from 180 degrees (left) to 0 degrees (right) in a
     semicircle centered at (100, 100) with radius 80.  The *percentage*
-    value (0-100) maps linearly onto this arc.
+    value (0-100) maps linearly onto this arc, so the swept angle is
+    always between 0 and 180 degrees.
+
+    Because the swept angle never exceeds 180, the SVG large-arc-flag
+    must stay at 0: setting it to 1 when percentage > 50 (the pre-v1.21
+    behavior) told the renderer to "take the long way round", which
+    produced the lower semicircle and made a 99.5% gauge look like a
+    near-full circle. sweep-flag = 1 matches the background arc so the
+    fill progresses from left (0%) to right (100%) along the top edge.
     """
     percentage = max(0.0, min(100.0, percentage))
     angle_deg = 180.0 - (percentage / 100.0) * 180.0
     angle_rad = math.radians(angle_deg)
     end_x = 100.0 + 80.0 * math.cos(angle_rad)
     end_y = 100.0 - 80.0 * math.sin(angle_rad)
-    large_arc = 1 if percentage > 50 else 0
-    return f"M 20 100 A 80 80 0 {large_arc} 1 {end_x:.1f} {end_y:.1f}"
+    return f"M 20 100 A 80 80 0 0 1 {end_x:.1f} {end_y:.1f}"
 
 
 def _read_logo_as_base64(logo_path: str) -> str | None:
