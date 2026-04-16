@@ -18,6 +18,7 @@
 
 <div class="card" style="max-width:640px;">
     <form method="post" action="/servers/{{ edit_server_name | urlencode }}/edit" id="edit-server-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label class="form-label">Server name</label>
             <input type="text" name="name" id="srv-name" class="form-input" value="{{ edit_server_name }}" pattern="[a-zA-Z][a-zA-Z0-9_-]*" required>
