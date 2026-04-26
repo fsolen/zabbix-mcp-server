@@ -68,22 +68,25 @@
     }
 
     function _parseTestResponse(container, responseText) {
-        // Parse known safe patterns from server HTML response using textContent
-        if (responseText.indexOf('status-dot-green') !== -1) {
-            var versionMatch = responseText.match(/Zabbix ([^<]*)/);
+        // DOMParser decodes HTML entities (&#x27; etc.) so the user
+        // does not see raw "URL can&#x27;t contain control characters".
+        var doc = new DOMParser().parseFromString(responseText, 'text/html');
+        if (doc.querySelector('.status-dot-green')) {
+            var versionMatch = (doc.body.textContent || '').match(/Zabbix\s+([\d.]+)/);
             var ver = versionMatch ? versionMatch[1] : '';
             _setTestResult(container, 'status-dot-green', 'Connected' + (ver ? ' — Zabbix ' + ver : ''));
-            return true;  // success
-        } else if (responseText.indexOf('status-dot-yellow') !== -1) {
+            return true;
+        } else if (doc.querySelector('.status-dot-yellow')) {
             _setTestResult(container, 'status-dot-yellow', 'API online — Token invalid or expired');
             return false;
-        } else if (responseText.indexOf('status-dot-red') !== -1) {
-            var errMatch = responseText.match(/color:var\(--color-danger\)[^>]*>([^<]*)/);
-            _setTestResult(container, 'status-dot-red', 'Error' + (errMatch ? ': ' + errMatch[1] : ''));
+        } else if (doc.querySelector('.status-dot-red')) {
+            var errSpan = doc.querySelector('span[style*="color:var(--color-danger)"]');
+            var msg = errSpan ? errSpan.textContent.trim() : doc.body.textContent.trim();
+            _setTestResult(container, 'status-dot-red', 'Error: ' + msg);
             return false;
         } else {
-            // Fallback: display as plain text (safe)
-            container.textContent = responseText.replace(/<[^>]*>/g, '');
+            var fallback = (doc.body && doc.body.textContent) || responseText;
+            _setTestResult(container, '', fallback.trim() || 'Test failed');
             return false;
         }
     }

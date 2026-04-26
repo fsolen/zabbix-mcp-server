@@ -50,7 +50,12 @@
             <div class="password-strength">
                 <div class="password-strength-bar" id="password-bar"></div>
             </div>
-            <div class="form-hint" id="password-hint">{% if edit_mode %}Leave empty to keep current password. {% endif %}Minimum 8 characters.</div>
+            <ul class="password-checklist" id="password-checklist" style="list-style:none; padding:0; margin:6px 0 0; font-size:0.85rem;">
+                <li id="pw-check-len" style="color:var(--color-muted);">&#x25CB; At least 10 characters</li>
+                <li id="pw-check-upper" style="color:var(--color-muted);">&#x25CB; One uppercase letter</li>
+                <li id="pw-check-digit" style="color:var(--color-muted);">&#x25CB; One digit</li>
+            </ul>
+            <div class="form-hint" id="password-hint">{% if edit_mode %}Leave empty to keep current password.{% endif %}</div>
         </div>
 
         {% if edit_mode %}
@@ -81,33 +86,39 @@
 
 {% block scripts %}
 <script>
+// Password rules MUST mirror the server-side check in views/users.py
+// (10 chars, one uppercase, one digit). The strength meter alone was
+// misleading: "Strong password" green bar but server then rejected
+// for missing uppercase. Now we show explicit pass/fail checklist
+// that matches what the server enforces, and the bar stays gray
+// until every rule passes.
 function checkPasswordStrength(password) {
     var bar = document.getElementById('password-bar');
-    var hint = document.getElementById('password-hint');
-    var score = 0;
-
-    if (password.length >= 8) score++;
-    if (password.length >= 12) score++;
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-    if (/\d/.test(password)) score++;
-    if (/[^a-zA-Z0-9]/.test(password)) score++;
+    var checks = {
+        len: password.length >= 10,
+        upper: /[A-Z]/.test(password),
+        digit: /\d/.test(password),
+    };
+    var setItem = function(id, pass) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.style.color = pass ? 'var(--color-success)' : 'var(--color-muted)';
+        el.firstChild.nodeValue = pass ? '✔ ' : '○ ';
+    };
+    setItem('pw-check-len', checks.len);
+    setItem('pw-check-upper', checks.upper);
+    setItem('pw-check-digit', checks.digit);
 
     bar.className = 'password-strength-bar';
+    var passed = checks.len + checks.upper + checks.digit;
     if (password.length === 0) {
         bar.style.width = '0';
-        hint.textContent = 'Minimum 8 characters.';
-    } else if (score <= 2) {
-        bar.classList.add('strength-weak');
-        hint.textContent = 'Weak password';
-        hint.style.color = 'var(--color-danger)';
-    } else if (score <= 3) {
-        bar.classList.add('strength-medium');
-        hint.textContent = 'Medium strength';
-        hint.style.color = 'var(--color-warning)';
-    } else {
+    } else if (passed === 3) {
         bar.classList.add('strength-strong');
-        hint.textContent = 'Strong password';
-        hint.style.color = 'var(--color-success)';
+    } else if (passed === 2) {
+        bar.classList.add('strength-medium');
+    } else {
+        bar.classList.add('strength-weak');
     }
 }
 </script>

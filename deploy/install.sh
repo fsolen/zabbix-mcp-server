@@ -1282,19 +1282,31 @@ except ImportError:
 
     chown "$SERVICE_USER:$SERVICE_USER" "$config_file"
 
-    # Detect primary IP for admin portal URL
-    local admin_ip
-    admin_ip=$(_get_host_ips | head -1)
-    local admin_url
-    admin_url=$(_format_url "$admin_ip" 9090)
-
-    # Build box with dynamic width based on content
-    local lines=(
-        "  URL:      $admin_url"
+    # List ALL detected IPs (not just the first) - reported by tester
+    # 2026-04-17 with `ip a` showing 4 interfaces; the installer only
+    # printed the NAT one and the user did not know which to use.
+    local lines=()
+    local first_ip=true
+    while IFS= read -r ip; do
+        [[ -z "$ip" ]] && continue
+        local url
+        url=$(_format_url "$ip" 9090)
+        if $first_ip; then
+            lines+=("  URL:      $url")
+            first_ip=false
+        else
+            lines+=("            $url")
+        fi
+    done <<< "$(_get_host_ips)"
+    if $first_ip; then
+        lines+=("  URL:      http://127.0.0.1:9090")
+    fi
+    lines+=(
         "  Username: admin"
         "  Password: $admin_password"
         ""
-        "  Save this password — it will not be shown again"
+        "  Save this password — it will not be shown again."
+        "  Forgot it? Run: sudo $0 set-admin-password"
     )
     local title="Admin Portal Credentials"
     # Find widest line

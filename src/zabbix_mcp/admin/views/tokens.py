@@ -179,6 +179,15 @@ async def token_create(request: Request) -> Response:
             "return_to": return_to,
             "error": "Name is required.",
         })
+    # Cap token name at 100 chars - prevents the token list table
+    # layout breaking on extreme input (reported 2026-04-17 with a
+    # 5000-char name that pushed the Delete button off-screen).
+    if len(name) > 100:
+        return admin_app.render("tokens/create.html", request, {
+            "active": "tokens",
+            "return_to": return_to,
+            "error": "Token name must be 100 characters or fewer.",
+        })
 
     # Parse scopes from hidden input (comma-separated) or checkboxes
     scopes_raw = str(form.get("scopes", "")).strip()

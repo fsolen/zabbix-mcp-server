@@ -244,7 +244,7 @@
 <!-- ============================================================ -->
 <!-- Step 1: Pick a Zabbix server -->
 <!-- ============================================================ -->
-<div class="wiz-step {% if not selected_server %}active{% else %}done{% endif %}">
+<div id="wiz-step-1" class="wiz-step {% if not selected_server %}active{% else %}done{% endif %}">
   <div class="wiz-step-header">
     <span class="wiz-step-num">1</span>
     <span class="wiz-step-title">Pick a Zabbix server</span>
@@ -253,7 +253,7 @@
   {% if servers %}
   <div class="wiz-cards">
     {% for s in servers %}
-      <a href="?server={{ s.name | urlencode }}" class="wiz-card {% if selected_server and selected_server.name == s.name %}selected{% endif %}">
+      <a href="?server={{ s.name | urlencode }}#wiz-step-2" class="wiz-card {% if selected_server and selected_server.name == s.name %}selected{% endif %}">
         <div class="wiz-card-title">
           {{ s.name }}
           {% if s.read_only %}
@@ -275,7 +275,7 @@
 <!-- Step 2: Pick an MCP token (only after server is chosen) -->
 <!-- ============================================================ -->
 {% if selected_server %}
-<div class="wiz-step {% if not selected_token and not skip_auth %}active{% else %}done{% endif %}">
+<div id="wiz-step-2" class="wiz-step {% if not selected_token and not skip_auth %}active{% else %}done{% endif %}">
   <div class="wiz-step-header">
     <span class="wiz-step-num">2</span>
     <span class="wiz-step-title">Pick an MCP token</span>
@@ -296,7 +296,7 @@
     {# "Continue without token" card - only when the MCP server is in
        no-auth mode, so snippets and curl drop the Authorization header. #}
     {% if not auth_enabled %}
-      <a href="?server={{ zabbix_server_name | urlencode }}&token=none{% if client_id %}&client={{ client_id | urlencode }}{% endif %}"
+      <a href="?server={{ zabbix_server_name | urlencode }}&token=none{% if client_id %}&client={{ client_id | urlencode }}{% endif %}#wiz-step-3"
          class="wiz-card {% if skip_auth %}selected{% endif %}" style="border-style: dashed;">
         <div class="wiz-card-title">
           Continue without token
@@ -309,7 +309,7 @@
     {% endif %}
 
     {% for t in tokens %}
-      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ t.id | urlencode }}{% if client_id %}&client={{ client_id | urlencode }}{% endif %}"
+      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ t.id | urlencode }}{% if client_id %}&client={{ client_id | urlencode }}{% endif %}#wiz-step-3"
          class="wiz-card {% if selected_token and selected_token.id == t.id %}selected{% endif %} {% if t.revoked %}disabled{% endif %}">
         <div class="wiz-card-title">
           {{ t.name }}
@@ -362,7 +362,7 @@
 <!-- Step 3: Pick the AI client -->
 <!-- ============================================================ -->
 {% if selected_token or skip_auth %}
-<div class="wiz-step {% if not selected_client %}active{% else %}done{% endif %}">
+<div id="wiz-step-3" class="wiz-step {% if not selected_client %}active{% else %}done{% endif %}">
   <div class="wiz-step-header">
     <span class="wiz-step-num">3</span>
     <span class="wiz-step-title">Pick your AI client</span>
@@ -370,7 +370,7 @@
 
   <div class="wiz-cards">
     {% for cid, c in clients %}
-      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ cid | urlencode }}"
+      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ cid | urlencode }}#wiz-step-4"
          class="wiz-card {% if client_id == cid %}selected{% endif %}">
         <div class="wiz-card-title">
           {{ c.name }}
@@ -392,7 +392,7 @@
 <!-- Step 4: Output (snippet + instructions) -->
 <!-- ============================================================ -->
 {% if selected_client %}
-<div class="wiz-step active">
+<div id="wiz-step-4" class="wiz-step active">
   <div class="wiz-step-header">
     <span class="wiz-step-num">4</span>
     <span class="wiz-step-title">Copy the config</span>
@@ -409,7 +409,7 @@
     {% for tr in selected_client.transports %}
       {% set is_active = (transport == tr) %}
       {% set is_server_default = (server_transport == tr) %}
-      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ tr }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}"
+      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ tr }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}#wiz-step-4"
          class="badge {% if is_active %}badge-success{% else %}badge-muted{% endif %}"
          style="text-decoration: none; padding: 4px 10px;">
         {{ tr }}
@@ -458,7 +458,7 @@
       <summary>Show auto-detected addresses ({{ url_ctx.detected_ips | length }}) - may not be reachable from clients</summary>
       <div class="wiz-ip-pills">
         {% for ip in url_ctx.detected_ips %}
-          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&override_host={{ ip | urlencode }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}"
+          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&override_host={{ ip | urlencode }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}#wiz-step-4"
              class="{% if url_ctx.host == ip %}selected{% endif %}">{{ ip }}</a>
         {% endfor %}
       </div>
@@ -489,7 +489,7 @@
       {% if selected_client.config_paths | length > 1 %}
       <div class="wiz-os-tabs">
         {% for os_key in selected_client.config_paths.keys() %}
-          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&os={{ os_key | urlencode }}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}"
+          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&os={{ os_key | urlencode }}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}#wiz-step-4"
              class="wiz-os-tab {% if (os_choice == os_key) or (not os_choice and loop.first) %}selected{% endif %}">{{ os_key }}</a>
         {% endfor %}
       </div>

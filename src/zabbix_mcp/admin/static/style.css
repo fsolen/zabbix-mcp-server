@@ -564,8 +564,33 @@ tbody tr:nth-child(even) {
     background: var(--bg-hover);
 }
 
-tbody tr:hover {
+/* Only highlight rows that have actual data. The "No entries" empty
+   state row uses [data-empty] (or has just a colspan placeholder)
+   and should not pretend it's clickable. */
+tbody tr:hover:not([data-empty]) {
     background: var(--color-primary-light);
+}
+tbody tr[data-empty]:hover {
+    background: inherit;
+    cursor: default;
+}
+
+/* Truncate user-controlled text columns to a fixed width with
+   ellipsis. Without this, a 200-character token name pushes the
+   Delete button off-screen and breaks the entire row layout. The
+   full text remains accessible via the title attribute (browser
+   tooltip on hover). Apply via class="cell-truncate" on <td>. */
+td.cell-truncate {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+td.cell-truncate-wide {
+    max-width: 480px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 tbody tr:last-child td {

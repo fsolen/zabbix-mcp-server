@@ -69,10 +69,25 @@ async def user_create(request: Request) -> Response:
 
     form_ctx = {"active": "users", "form_username": username, "form_role": role}
 
+    # Validation: ASCII-only, length 2-50, [a-z0-9_-]+. Without this, a
+    # Unicode username like "šáš" passes through to tomlkit and breaks
+    # config.toml writing with a 500 (reported 2026-04-17). Also caps
+    # length so a 200-character username does not blow up table layouts.
+    import re as _re
     if not username or len(username) < 2:
         return admin_app.render("users/create.html", request, {
             **form_ctx,
             "error": "Username must be at least 2 characters.",
+        })
+    if len(username) > 50:
+        return admin_app.render("users/create.html", request, {
+            **form_ctx,
+            "error": "Username must be 50 characters or fewer.",
+        })
+    if not _re.match(r"^[a-z0-9_-]+$", username):
+        return admin_app.render("users/create.html", request, {
+            **form_ctx,
+            "error": "Username can only contain lowercase letters, digits, dashes, and underscores (no spaces, accents, or other special characters).",
         })
 
     if len(password) < 10:

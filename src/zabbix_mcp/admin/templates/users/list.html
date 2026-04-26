@@ -32,7 +32,7 @@
             {% if users %}
             {% for username, user_data in users.items() %}
             <tr id="user-{{ username }}">
-                <td style="font-weight:500;">{{ username }}</td>
+                <td class="cell-truncate" style="font-weight:500;" title="{{ username }}">{{ username }}</td>
                 <td>
                     {% if user_data.role == 'admin' %}
                     <span class="badge badge-danger">admin</span>
@@ -58,7 +58,7 @@
             </tr>
             {% endfor %}
             {% else %}
-            <tr>
+            <tr data-empty="true">
                 <td colspan="4">
                     <div class="empty-state">
                         <div class="empty-state-icon">&#x1F465;</div>

@@ -19,11 +19,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger("zabbix_mcp.config")
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -185,6 +188,79 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "zabbix_raw_api_call", "health_check",
     ],
 }
+
+
+def _parse_zabbix_server(name: str, srv: object) -> "ZabbixServerConfig":
+    """Validate one [zabbix.<name>] section and build ZabbixServerConfig.
+
+    Raises ConfigError on any problem so the caller can log and skip
+    just this entry instead of failing the whole MCP boot.
+    """
+    if not isinstance(srv, dict):
+        raise ConfigError(f"Invalid Zabbix server config for '{name}'")
+    url = srv.get("url")
+    if not url:
+        raise ConfigError(f"Zabbix server '{name}' is missing 'url'")
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        raise ConfigError(
+            f"Zabbix server '{name}' has invalid URL '{url}'. "
+            f"Must start with http:// or https://"
+        )
+    # Catch malformed hostnames like "0.0.0.0.0.0.0" or "host with
+    # spaces" before they propagate to ZabbixAPI() and surface as a
+    # cryptic urllib error mid-request. We do not resolve DNS here -
+    # the Zabbix host may legitimately be down at MCP boot.
+    from urllib.parse import urlparse as _urlparse
+    try:
+        _parsed = _urlparse(url)
+    except ValueError as exc:
+        raise ConfigError(
+            f"Zabbix server '{name}' URL '{url}' could not be parsed: {exc}"
+        ) from exc
+    if not _parsed.hostname:
+        raise ConfigError(
+            f"Zabbix server '{name}' URL '{url}' has no hostname"
+        )
+    import re as _re_url
+    from ipaddress import ip_address as _ip_addr_url
+    host = _parsed.hostname
+    is_valid = False
+    try:
+        _ip_addr_url(host)
+        is_valid = True
+    except ValueError:
+        # RFC 1123 hostname: labels of [A-Za-z0-9-], 1-63 chars each,
+        # total <=253. Reject all-numeric strings that are not valid
+        # IPs (catches typos like 0.0.0.0.0.0.0 - too many octets).
+        if 0 < len(host) <= 253 and _re_url.fullmatch(
+            r"(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*", host
+        ):
+            if not _re_url.fullmatch(r"[0-9.]+", host):
+                is_valid = True
+    if not is_valid:
+        raise ConfigError(
+            f"Zabbix server '{name}' URL '{url}' has an invalid hostname "
+            f"'{host}'. Use a DNS name (e.g. zabbix.example.com) or a valid "
+            f"IPv4/IPv6 address."
+        )
+    api_token = srv.get("api_token")
+    if not api_token:
+        raise ConfigError(f"Zabbix server '{name}' is missing 'api_token'")
+    api_token = _resolve_env_vars(api_token)
+    if not api_token.strip():
+        raise ConfigError(
+            f"Zabbix server '{name}' has empty 'api_token' after resolving "
+            f"environment variables"
+        )
+    return ZabbixServerConfig(
+        name=name,
+        url=url.rstrip("/"),
+        api_token=api_token,
+        read_only=srv.get("read_only", True),
+        verify_ssl=srv.get("verify_ssl", True),
+        skip_version_check=srv.get("skip_version_check", False),
+        request_timeout=int(srv.get("request_timeout", 300)),
+    )
 
 
 def _validate_public_url(value: str, tls_cert_file: object) -> str:
@@ -377,38 +453,33 @@ def load_config(path: str | Path) -> AppConfig:
         )
 
     zabbix_servers: dict[str, ZabbixServerConfig] = {}
+    skipped_servers: list[tuple[str, str]] = []
     for name, srv in zabbix_raw.items():
-        if not isinstance(srv, dict):
-            raise ConfigError(f"Invalid Zabbix server config for '{name}'")
-
-        url = srv.get("url")
-        if not url:
-            raise ConfigError(f"Zabbix server '{name}' is missing 'url'")
-        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-            raise ConfigError(
-                f"Zabbix server '{name}' has invalid URL '{url}'. "
-                f"Must start with http:// or https://"
+        # Per-server validation now logs a warning and SKIPS the bad
+        # server instead of killing the whole MCP. A single broken
+        # [zabbix.*] section (typo in URL, expired token env var,
+        # malformed hostname) used to take down the entire service at
+        # boot - reported by tester 2026-04-17 ("saved and restarted.
+        # mcp dead :D"). Skipping isolates the failure: other Zabbix
+        # servers still register, the broken one is reported on the
+        # /servers admin page so the operator can fix it.
+        try:
+            zabbix_servers[name] = _parse_zabbix_server(name, srv)
+        except ConfigError as exc:
+            logger.warning(
+                "Skipping Zabbix server '%s' because of config error: %s",
+                name, exc,
             )
+            skipped_servers.append((name, str(exc)))
 
-        api_token = srv.get("api_token")
-        if not api_token:
-            raise ConfigError(f"Zabbix server '{name}' is missing 'api_token'")
-
-        api_token = _resolve_env_vars(api_token)
-        if not api_token.strip():
-            raise ConfigError(
-                f"Zabbix server '{name}' has empty 'api_token' after resolving "
-                f"environment variables"
-            )
-
-        zabbix_servers[name] = ZabbixServerConfig(
-            name=name,
-            url=url.rstrip("/"),
-            api_token=api_token,
-            read_only=srv.get("read_only", True),
-            verify_ssl=srv.get("verify_ssl", True),
-            skip_version_check=srv.get("skip_version_check", False),
-            request_timeout=int(srv.get("request_timeout", 300)),
+    if not zabbix_servers and not skipped_servers:
+        raise ConfigError(
+            "No Zabbix servers configured. Add at least one [zabbix.<name>] section."
+        )
+    if not zabbix_servers and skipped_servers:
+        raise ConfigError(
+            "All configured Zabbix servers failed validation: "
+            + "; ".join(f"{n}: {e}" for n, e in skipped_servers)
         )
 
     # Optional [admin.ai] block for the report-template AI assistant.

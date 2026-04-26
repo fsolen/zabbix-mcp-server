@@ -21,10 +21,34 @@ logger = logging.getLogger("zabbix_mcp.admin")
 AUDIT_LOG_PATH = Path("/var/log/zabbix-mcp/audit.log")
 
 
-def _read_audit_entries(limit: int = 200, action_filter: str | None = None, search: str | None = None, date_from: str | None = None, date_to: str | None = None) -> list[dict]:
-    """Read audit log entries (newest first)."""
+_SORT_KEYS = {
+    "timestamp": ("timestamp", ""),
+    "action": ("action", ""),
+    "user": ("user", ""),
+    "target": ("target_id", ""),
+    "ip": ("ip", ""),
+}
+
+
+def _read_audit_entries(
+    limit: int = 200,
+    offset: int = 0,
+    action_filter: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = "timestamp",
+    sort_order: str = "desc",
+) -> tuple[list[dict], int]:
+    """Read audit log entries with filtering, sorting, pagination.
+
+    Returns ``(entries, total_after_filter)``. Total count is what the
+    UI uses to decide whether to show "Load more". Sort defaults to
+    newest first because that's what an operator wants 95% of the
+    time.
+    """
     if not AUDIT_LOG_PATH.exists():
-        return []
+        return [], 0
 
     entries = []
     try:
@@ -49,9 +73,11 @@ def _read_audit_entries(limit: int = 200, action_filter: str | None = None, sear
     except Exception as e:
         logger.error("Failed to read audit log: %s", e)
 
-    # Newest first
-    entries.reverse()
-    return entries[:limit]
+    field, default = _SORT_KEYS.get(sort_by, _SORT_KEYS["timestamp"])
+    reverse = sort_order != "asc"
+    entries.sort(key=lambda e: e.get(field, default) or default, reverse=reverse)
+    total = len(entries)
+    return entries[offset:offset + limit], total
 
 
 async def audit_view(request: Request) -> Response:
@@ -62,14 +88,29 @@ async def audit_view(request: Request) -> Response:
 
     action_filter = request.query_params.get("action")
     try:
-        limit = min(int(request.query_params.get("limit", "200")), 10000)
+        limit = min(int(request.query_params.get("limit", "50")), 10000)
     except (ValueError, TypeError):
-        limit = 200
+        limit = 50
+    try:
+        offset = max(int(request.query_params.get("offset", "0")), 0)
+    except (ValueError, TypeError):
+        offset = 0
     search = request.query_params.get("search")
     date_from = request.query_params.get("date_from")
     date_to = request.query_params.get("date_to")
+    sort_by = request.query_params.get("sort", "timestamp")
+    sort_order = request.query_params.get("order", "desc")
+    if sort_by not in _SORT_KEYS:
+        sort_by = "timestamp"
+    if sort_order not in ("asc", "desc"):
+        sort_order = "desc"
 
-    entries = _read_audit_entries(limit=limit, action_filter=action_filter, search=search, date_from=date_from, date_to=date_to)
+    entries, total = _read_audit_entries(
+        limit=limit, offset=offset,
+        action_filter=action_filter, search=search,
+        date_from=date_from, date_to=date_to,
+        sort_by=sort_by, sort_order=sort_order,
+    )
 
     # Collect unique action types for filter dropdown
     action_types = set()
@@ -85,9 +126,16 @@ async def audit_view(request: Request) -> Response:
         except Exception:
             pass
 
-    return admin_app.render("audit.html", request, {
+    ctx = {
         "active": "audit",
         "entries": entries,
+        "total_entries": total,
+        "offset": offset,
+        "limit": limit,
+        "next_offset": offset + limit if (offset + limit) < total else None,
+        "has_more": (offset + limit) < total,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
         "action_types": sorted(action_types),
         "current_filter": action_filter,
         "filters": {
@@ -96,7 +144,14 @@ async def audit_view(request: Request) -> Response:
             "action": action_filter or "",
             "search": request.query_params.get("search", ""),
         },
-    })
+    }
+    # When called via htmx (filter / sort change / load more), return
+    # only the table partial so it can be swapped into #audit-table
+    # without nesting the entire page inside itself - reported
+    # 2026-04-17 with screenshots showing the page rendered twice.
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "audit_table_partial.html" if is_htmx else "audit.html"
+    return admin_app.render(template, request, ctx)
 
 
 async def audit_export(request: Request) -> Response:
@@ -106,10 +161,14 @@ async def audit_export(request: Request) -> Response:
     if not session:
         return RedirectResponse("/login", status_code=303)
 
-    entries = _read_audit_entries(limit=10000)
+    entries, _ = _read_audit_entries(limit=10000)
 
     output = io.StringIO()
-    writer = csv.writer(output)
+    # QUOTE_ALL is mandatory because details fields can contain
+    # commas, quotes, and newlines that would otherwise produce
+    # invalid CSV. csv.writer handles the escaping automatically
+    # (doubles internal quotes, wraps every field in quotes).
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator="\n")
     writer.writerow(["Timestamp", "Action", "User", "Target Type", "Target ID", "Details", "IP"])
 
     for entry in entries:

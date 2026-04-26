@@ -150,6 +150,20 @@ async def server_create(request: Request) -> Response:
     if not url.startswith(("http://", "https://")):
         return admin_app.flash_redirect("/servers", "Invalid URL. Must start with http:// or https://.", "danger")
 
+    # Strict hostname validation: reject malformed inputs like
+    # "http://0.0.0.0.0.0.0" or "http://host with spaces" before they
+    # land in config.toml. Without this, parse_config at next boot
+    # would skip the broken server with a warning, but the operator
+    # would have no idea why.
+    try:
+        from zabbix_mcp.config import _parse_zabbix_server
+        _parse_zabbix_server("__validate__", {
+            "url": url,
+            "api_token": api_token or "x",  # token validated separately above
+        })
+    except Exception as exc:
+        return admin_app.flash_redirect("/servers", f"Invalid URL: {exc}", "danger")
+
     try:
         server_data = {
             "url": url,
@@ -311,6 +325,44 @@ async def server_delete(request: Request) -> Response:
         return admin_app.flash_redirect("/servers", f"Failed to delete server: {e}", "danger")
 
 
+def _friendly_error(exc: Exception) -> str:
+    """Translate raw urllib / network errors to user-facing messages.
+
+    The previous server card "Error: Unable to connect to ...:
+    <urlopen error [Errno 111] Connec" output (truncated mid-word!)
+    was reported 2026-04-17 as "bad error/copy for user". This
+    helper maps the common errno / SSL / HTTP cases to a short
+    actionable line plus keeps the technical detail short.
+    """
+    msg = str(exc)
+    lower = msg.lower()
+    # ECONNREFUSED on Linux = errno 111, on macOS = errno 61
+    if "errno 111" in lower or "errno 61" in lower or "connection refused" in lower:
+        return "Connection refused. Is Zabbix running on this URL?"
+    if "errno -2" in lower or "name or service not known" in lower or "nodename nor servname" in lower:
+        return "Could not resolve hostname. Check the URL is correct."
+    if "errno -3" in lower or "temporary failure in name resolution" in lower:
+        return "DNS lookup temporarily failed. Try again or fix DNS."
+    if "timed out" in lower or "timeout" in lower:
+        return "Connection timed out. Check the network or raise request_timeout."
+    if "ssl" in lower or "certificate" in lower:
+        return "TLS handshake failed. Check the certificate or set verify_ssl = false in config.toml."
+    if "401" in msg or "unauthorized" in lower:
+        return "Zabbix returned 401. The API token is invalid or expired."
+    if "403" in msg or "forbidden" in lower:
+        return "Zabbix returned 403. The API token lacks permission for this operation."
+    if "404" in msg or "not found" in lower:
+        return "Zabbix returned 404. The URL points outside the Zabbix frontend."
+    # Fallback: trim to a clean word boundary so we never end mid-word
+    # like the original "Connec" report.
+    if len(msg) > 120:
+        cutoff = msg.rfind(" ", 0, 120)
+        if cutoff < 60:
+            cutoff = 120
+        msg = msg[:cutoff].rstrip(",.;:") + "..."
+    return msg
+
+
 async def server_test(request: Request) -> Response:
     """Test connection to a specific Zabbix server (HTMX endpoint)."""
     admin_app = request.app.state.admin_app
@@ -339,7 +391,7 @@ async def server_test(request: Request) -> Response:
                 f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-warning);">&#x26A0; Token invalid or expired</span>'
             )
     except Exception as e:
-        msg = _html.escape(str(e)[:100])
+        msg = _html.escape(_friendly_error(e))
         return HTMLResponse(
             f'<span class="status-dot status-dot-red"></span> Error'
             f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-danger);">{msg}</span>'
@@ -420,14 +472,19 @@ async def server_test_new(request: Request) -> Response:
     if any(hostname == b or hostname.endswith("." + b) for b in _blocked):
         return HTMLResponse('<span class="text-danger">URL points to a blocked internal address</span>')
 
-    # SECURITY: resolve hostname and check if it's internal (prevents DNS rebinding / SSRF redirect bypass)
+    # SECURITY: resolve hostname and block only loopback / link-local /
+    # reserved (covers AWS metadata 169.254.169.254 etc). RFC1918 private
+    # IP ranges (10/8, 172.16/12, 192.168/16) are explicitly ALLOWED -
+    # they are exactly where Zabbix typically lives, and blocking them
+    # made the entire admin portal unable to add a server in 90% of
+    # real deployments (reported by tester 2026-04-17).
     import socket
     try:
         resolved_ip = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)[0][4][0]
         from ipaddress import ip_address as _ip
         addr = _ip(resolved_ip)
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-            return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
+        if addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            return HTMLResponse('<span class="text-danger">URL resolves to a loopback / link-local / reserved address (blocked)</span>')
     except (socket.gaierror, ValueError):
         pass  # Let ZabbixAPI handle DNS errors
 
@@ -444,7 +501,7 @@ async def server_test_new(request: Request) -> Response:
             f'<span style="color:var(--color-success);"> Connected — Zabbix {version}</span>'
         )
     except Exception as e:
-        msg = _html.escape(str(e)[:120])
+        msg = _html.escape(_friendly_error(e))
         return HTMLResponse(
             f'<span class="status-dot status-dot-red"></span>'
             f'<span style="color:var(--color-danger);"> {msg}</span>'

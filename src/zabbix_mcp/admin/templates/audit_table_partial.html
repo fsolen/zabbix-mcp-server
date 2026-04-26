@@ -1,0 +1,45 @@
+{#
+  Zabbix MCP Server
+  Copyright (C) 2026 initMAX s.r.o.
+
+  Partial template returned to htmx swaps (filter / sort / paging
+  changes on /audit). Renders only the table body + Load more
+  pager. The full page chrome (sidebar, filters, header) lives in
+  audit.html and is NOT re-emitted, which fixes the dual-render
+  bug reported 2026-04-17 (entire page rendered inside #audit-table
+  on every filter change).
+
+  When called via "Load more" (offset > 0), htmx swaps with
+  hx-swap="beforeend" so we wrap rows in an oob-friendly fragment;
+  the empty-state row only renders for the first page.
+#}
+{% if entries %}
+{% for entry in entries %}
+<tr>
+    <td class="text-sm text-muted" style="white-space:nowrap;">{{ entry.timestamp }}</td>
+    <td>
+        {% if entry.action.startswith('token.') %}
+        <span class="badge badge-warning">{{ entry.action }}</span>
+        {% elif entry.action.startswith('user.') %}
+        <span class="badge badge-primary">{{ entry.action }}</span>
+        {% elif entry.action == 'login' %}
+        <span class="badge badge-success">{{ entry.action }}</span>
+        {% elif entry.action == 'logout' %}
+        <span class="badge badge-muted">{{ entry.action }}</span>
+        {% elif entry.action.startswith('settings.') %}
+        <span class="badge badge-danger">{{ entry.action }}</span>
+        {% else %}
+        <span class="badge badge-muted">{{ entry.action }}</span>
+        {% endif %}
+    </td>
+    <td>{{ entry.user }}</td>
+    <td class="text-sm cell-truncate" title="{% if entry.target_type %}{{ entry.target_type }}: {{ entry.target_id }}{% endif %}">{% if entry.target_type %}{{ entry.target_type }}: {{ entry.target_id }}{% endif %}</td>
+    <td class="text-sm text-muted cell-truncate" tabindex="0" data-tooltip="{{ entry.details }}" title="{{ entry.details }}">{{ entry.details }}</td>
+    <td class="monospace text-sm">{{ entry.ip }}</td>
+</tr>
+{% endfor %}
+{% elif offset == 0 %}
+<tr data-empty="true">
+    <td colspan="6" class="text-center text-muted" style="padding:24px;">No audit log entries found</td>
+</tr>
+{% endif %}

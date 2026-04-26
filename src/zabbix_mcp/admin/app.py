@@ -250,8 +250,26 @@ class AdminApp:
         trusted_cfg = getattr(config.server, "trusted_proxies", None) or []
         self.trusted_proxies = list(trusted_cfg)
 
-        # Track whether config changed and restart is needed
+        # Track whether config changed and restart is needed.
+        # Snapshot the serialized TOML at MCP startup so we can later
+        # detect when the operator reverts a change (saves the disk
+        # version back to what is currently running). Without this the
+        # banner stayed sticky forever - reported 2026-04-17 ("I
+        # removed changes that required restart. Why ask me to still
+        # do that").
         self.restart_needed = False
+        self._initial_config_dump: str | None = None
+        self._config_dump_mtime: float | None = None
+        try:
+            from zabbix_mcp.admin.config_writer import (
+                load_config_document, TOMLKIT_AVAILABLE,
+            )
+            if TOMLKIT_AVAILABLE:
+                import tomlkit as _tomlkit
+                doc = load_config_document(self.config_path)
+                self._initial_config_dump = _tomlkit.dumps(doc)
+        except Exception:
+            pass
         self.start_time = datetime.now()
 
         # Jinja2 environment
@@ -262,6 +280,44 @@ class AdminApp:
 
         # Build Starlette app
         self.app = self._build_app()
+
+    def _compute_restart_needed(self) -> bool:
+        """Check if the on-disk config differs from the running snapshot.
+
+        Cheap because we read mtime first and only re-parse the TOML
+        when the file actually changed since the last check. Returns
+        the bool that base.html uses to decide whether to show the
+        "Restart needed" banner. When the operator reverts a change
+        and the disk version equals the running snapshot, the banner
+        clears automatically without needing the in-memory flag - so
+        Bug 17 ("flag stays sticky after revert") goes away.
+        """
+        if self._initial_config_dump is None:
+            # Fall back to the in-memory flag when we could not
+            # snapshot at startup (e.g. tomlkit missing).
+            return self.restart_needed
+        try:
+            from os import stat as _stat
+            mtime = _stat(self.config_path).st_mtime
+        except Exception:
+            return self.restart_needed
+        if mtime == self._config_dump_mtime:
+            # File unchanged since last check; reuse last result by
+            # falling through to the explicit flag.
+            return self.restart_needed
+        # File changed - re-parse and compare.
+        self._config_dump_mtime = mtime
+        try:
+            from zabbix_mcp.admin.config_writer import load_config_document
+            import tomlkit as _tomlkit
+            current = _tomlkit.dumps(load_config_document(self.config_path))
+        except Exception:
+            return self.restart_needed
+        differs = current != self._initial_config_dump
+        # Cache the result back on the explicit flag too so subsequent
+        # renders skip the I/O until the next mtime change.
+        self.restart_needed = differs
+        return differs
 
     def _build_app(self) -> Starlette:
         from zabbix_mcp.admin.views.dashboard import dashboard
@@ -344,7 +400,7 @@ class AdminApp:
             "flash_message": None,
             "flash_type": "info",
             "year": datetime.now().year,
-            "restart_needed": self.restart_needed,
+            "restart_needed": self._compute_restart_needed(),
         }
         # Detect "host = 0.0.0.0 + no public_url" misconfig - on every
         # page render so the operator sees the banner until they fix

@@ -53,7 +53,11 @@ SECTION_CONFIG = {
     },
     "admin": {
         "toml_section": "admin",
-        "allowed_keys": {"enabled", "port"},
+        # `enabled` intentionally NOT exposed: disabling the admin
+        # portal from inside the admin portal is a foot-gun (operator
+        # locks themselves out). To disable: edit config.toml directly
+        # and restart.
+        "allowed_keys": {"port", "update_check_enabled"},
         "min_role": "admin",
     },
     # [admin.ai] - optional sub-table driving the "Generate with AI"
@@ -173,6 +177,20 @@ async def settings_update(request: Request) -> Response:
         doc = load_config_document(admin_app.config_path)
         import tomlkit
 
+        # Snapshot the serialized TOML BEFORE any writes so we can
+        # diff against the post-write version. If the operator hits
+        # Save without actually changing anything (or reverts a
+        # change), the dump is identical and we skip the
+        # restart_needed flag entirely - reported 2026-04-17 as
+        # "even with no changes - still pops out 'restart required'".
+        # Per-field comparison was unreliable because of tomlkit
+        # types vs Python types and config-default-vs-explicit edge
+        # cases. File-content diff is bulletproof.
+        try:
+            old_dump = tomlkit.dumps(doc)
+        except Exception:
+            old_dump = None
+
         # Support dotted section names (e.g. "admin.ai" for nested
         # TOML sub-tables) by walking the path and creating missing
         # tables as we go.
@@ -183,23 +201,15 @@ async def settings_update(request: Request) -> Response:
                 config_section.add(part, tomlkit.table())
             config_section = config_section[part]
 
-        needs_restart = False
-
         for key in allowed_keys:
-            old_value = config_section.get(key)
-
             if key in BOOL_KEYS:
-                new_value = key in form
-                config_section[key] = new_value
+                config_section[key] = key in form
             elif key in LIST_KEYS:
                 raw = str(form.get(key, "")).strip()
                 if raw:
-                    new_value = [s.strip() for s in raw.split(",") if s.strip()]
-                    config_section[key] = new_value
-                else:
-                    new_value = None
-                    if key in config_section:
-                        del config_section[key]
+                    config_section[key] = [s.strip() for s in raw.split(",") if s.strip()]
+                elif key in config_section:
+                    del config_section[key]
             elif key in form:
                 value = str(form.get(key, "")).strip()
                 if value == "":
@@ -208,22 +218,24 @@ async def settings_update(request: Request) -> Response:
                     # does not have to re-paste the key on every save.
                     if key in SECRET_KEEP_EMPTY:
                         continue
-                    new_value = None
                     if key in config_section:
                         del config_section[key]
                     continue
                 if value.isdigit():
                     value = int(value)
-                new_value = value
                 config_section[key] = value
             else:
                 continue
 
-            # Flag restart if any field actually changed
-            old_cmp = str(old_value) if old_value is not None else ""
-            new_cmp = str(new_value) if new_value is not None else ""
-            if old_cmp != new_cmp:
-                needs_restart = True
+        # File-content diff: only flag restart if the serialized TOML
+        # actually differs from before. Replaces the previous
+        # per-field old_cmp/new_cmp string comparison which had false
+        # positives for boolean and list types coming from tomlkit.
+        try:
+            new_dump = tomlkit.dumps(doc)
+        except Exception:
+            new_dump = None
+        needs_restart = (old_dump is None or new_dump is None or old_dump != new_dump)
 
         save_config_document(admin_app.config_path, doc)
         logger.info("Settings [%s] updated by %s", section, session.user)
