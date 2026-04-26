@@ -340,6 +340,13 @@ enabled = true
 # Shares host, TLS certificates, and CORS settings from [server] section.
 port = 9090
 
+# Update check (since v1.24): when enabled, the admin portal pings
+# the GitHub releases API once an hour and shows an "Update vX.Y
+# available" banner in the top bar. Outbound HTTPS to api.github.com
+# is the only data leaving the server. Disable for offline /
+# air-gapped deployments. Default: true.
+update_check_enabled = true
+
 # Admin users — create via the admin portal or manually here.
 # Password hashes are generated with scrypt. To set a password manually:
 #   python3 -c "import hashlib,os; s=os.urandom(16); print(f'scrypt:16384:8:1${s.hex()}${hashlib.scrypt(input(\"Password: \").encode(),salt=s,n=16384,r=8,p=1,dklen=32).hex()}')"

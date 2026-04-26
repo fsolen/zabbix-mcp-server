@@ -281,6 +281,25 @@ class AdminApp:
         # Build Starlette app
         self.app = self._build_app()
 
+        # Background update checker - polls GitHub releases hourly,
+        # surfaces "vX.Y available" banner. Operator can disable via
+        # [admin].update_check_enabled = false in config.toml.
+        try:
+            from zabbix_mcp.admin.update_check import get_checker
+            update_check_enabled = True
+            try:
+                from zabbix_mcp.admin.config_writer import load_config_document, TOMLKIT_AVAILABLE
+                if TOMLKIT_AVAILABLE:
+                    doc = load_config_document(self.config_path)
+                    update_check_enabled = bool(
+                        doc.get("admin", {}).get("update_check_enabled", True)
+                    )
+            except Exception:
+                pass
+            get_checker().start(enabled=update_check_enabled)
+        except Exception as exc:
+            logger.debug("Update checker not started: %s", exc)
+
     def _compute_restart_needed(self) -> bool:
         """Check if the on-disk config differs from the running snapshot.
 
@@ -402,6 +421,11 @@ class AdminApp:
             "year": datetime.now().year,
             "restart_needed": self._compute_restart_needed(),
         }
+        try:
+            from zabbix_mcp.admin.update_check import get_checker
+            ctx["update_info"] = get_checker().to_context()
+        except Exception:
+            ctx["update_info"] = {"available": False}
         # Detect "host = 0.0.0.0 + no public_url" misconfig - on every
         # page render so the operator sees the banner until they fix
         # it. Cheap (just attribute reads, no I/O). When triggered we

@@ -50,7 +50,11 @@
                         <form method="post" action="/users/{{ username }}/delete" style="display:inline;" id="del-user-{{ username }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="button" class="btn btn-danger btn-sm"
-                                    onclick="confirmDelete('user {{ username }}', 'del-user-{{ username }}')">Delete</button>
+                                    {% if user_data.role == 'admin' %}
+                                    onclick="confirmDeleteTyped('{{ username }}', 'You are about to delete an ADMIN user. They will lose all access immediately.', 'del-user-{{ username }}')"
+                                    {% else %}
+                                    onclick="confirmDelete('user {{ username }}', 'del-user-{{ username }}')"
+                                    {% endif %}>Delete</button>
                         </form>
                         {% endif %}
                     </div>

@@ -257,9 +257,9 @@
         <div class="wiz-card-title">
           {{ s.name }}
           {% if s.read_only %}
-            <span class="badge badge-warning">Read-only</span>
+            <span class="status-label status-label-warn" title="Read-only mode: tools that modify data are blocked.">&#x1F512; Read-only</span>
           {% else %}
-            <span class="badge badge-danger">Writes allowed</span>
+            <span class="status-label status-label-danger" title="Write operations enabled - tools can modify your Zabbix data.">&#x26A0; Writes allowed</span>
           {% endif %}
         </div>
         <div class="wiz-card-meta">{{ s.url }}</div>

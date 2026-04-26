@@ -27,7 +27,7 @@ RESTART_REQUIRED = {"host", "port", "transport", "tls_cert_file", "tls_key_file"
 LIST_KEYS = {"cors_origins", "allowed_hosts", "allowed_import_dirs", "tools", "disabled_tools"}
 
 # Boolean fields — checkbox present = True, absent = False
-BOOL_KEYS = {"compact_output", "enabled"}
+BOOL_KEYS = {"compact_output", "enabled", "update_check_enabled"}
 
 # Map UI section names to actual config.toml section + allowed keys
 SECTION_CONFIG = {
@@ -108,6 +108,7 @@ async def settings_view(request: Request) -> Response:
             # Admin fields — prefix to avoid collision (both have "port")
             settings["admin_enabled"] = admin_cfg.get("enabled", False)
             settings["admin_port"] = admin_cfg.get("port", 9090)
+            settings["update_check_enabled"] = admin_cfg.get("update_check_enabled", True)
 
             # [admin.ai] sub-table. We expose the provider, model,
             # and enabled flag verbatim, but never the raw api_key -

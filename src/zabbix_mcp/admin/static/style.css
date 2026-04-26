@@ -593,6 +593,41 @@ td.cell-truncate-wide {
     white-space: nowrap;
 }
 
+/* Form invalid state - red border around the input so the operator
+   sees which field is missing without reading the inline message. */
+.input-invalid,
+input.input-invalid,
+select.input-invalid,
+textarea.input-invalid {
+    border-color: var(--color-danger) !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+/* Status labels are informational only - they look like inline tags
+   (flat fill, no shadow, no hover) so the operator never thinks
+   they are clickable. Badges with btn-like styling were reported
+   2026-04-17 as "looks clickable but isn't, confusing". */
+.status-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    margin-left: 4px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: default;
+    pointer-events: none;
+    border: 1px solid;
+}
+.status-label-info    { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.45); color: #3b82f6; }
+.status-label-success { background: rgba(34,197,94,0.10);  border-color: rgba(34,197,94,0.45);  color: #22c55e; }
+.status-label-warn    { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.45); color: #f59e0b; }
+.status-label-danger  { background: rgba(239,68,68,0.10);  border-color: rgba(239,68,68,0.45);  color: #ef4444; }
+
 tbody tr:last-child td {
     border-bottom: none;
 }
