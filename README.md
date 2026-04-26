@@ -856,6 +856,31 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>skip_version_check</code></td><td>Skip zabbix-utils version compatibility check (default: <code>false</code>)</td></tr>
 </table>
 
+## Update notifications
+
+Since v1.24, the admin portal pings the GitHub releases API once an hour and shows an "Update vX.Y available" pill in the top bar when a newer stable release is out. Click the pill to read the release notes. Disable in offline / air-gapped environments by setting:
+
+```toml
+[admin]
+update_check_enabled = false
+```
+
+The check is the only outbound HTTPS request the admin portal makes - it goes to `https://api.github.com/repos/initMAX/zabbix-mcp-server/releases/latest` and reads only the latest tag. Pre-releases are skipped. Failed checks (offline, rate limited, DNS) are silent and reuse the last successful answer cached at `/etc/zabbix-mcp/state/version-cache.json`.
+
+The same toggle is also exposed in the admin portal at `Settings -> Admin Portal -> Check for updates`.
+
+## First-time admin portal access
+
+The installer auto-generates a random admin password during the first `./deploy/install.sh install` and prints it inside a green box on stdout, together with **all detected non-loopback URLs** the portal listens on (since v1.24). The same box also contains the reset command:
+
+```
+sudo ./deploy/install.sh set-admin-password
+```
+
+Run it any time to reset the password if it was lost, or to set a known one for shared environments. The new password is hashed with scrypt before write, so the raw value is never persisted on disk.
+
+If the install output scrolled past, the credentials are also in the systemd unit logs: `journalctl -u zabbix-mcp-server` and (for Docker) `docker logs zabbix-mcp-server | grep -A 5 BOOTSTRAP`.
+
 ## Public URL and reverse-proxy deployments
 
 When the server is exposed via a public DNS name, a reverse proxy (nginx, Caddy, Traefik), or runs with `host = "0.0.0.0"`, the bind address differs from the URL clients actually use. The MCP server uses one URL for both **listening** and **OAuth discovery** by default — for `0.0.0.0` deployments that produces a discovery document advertising `https://0.0.0.0:8080/`, which remote MCP clients (Claude Desktop, `mcp-remote`, etc.) cannot follow and bail out with a 404.
