@@ -833,9 +833,10 @@ All available options with detailed descriptions are in [`config.example.toml`](
 
 <table>
 <tr><th width="130">Section</th><th width="180">Parameter</th><th>Description</th></tr>
-<tr><td rowspan="14"><code>[server]</code></td><td><code>transport</code></td><td><code>"http"</code> (recommended), <code>"sse"</code>, or <code>"stdio"</code></td></tr>
+<tr><td rowspan="15"><code>[server]</code></td><td><code>transport</code></td><td><code>"http"</code> (recommended), <code>"sse"</code>, or <code>"stdio"</code></td></tr>
 <tr><td><code>host</code></td><td>HTTP bind address — <code>127.0.0.1</code> (localhost only) or <code>0.0.0.0</code> (all interfaces)</td></tr>
 <tr><td><code>port</code></td><td>HTTP port, 1–65535 (default: <code>8080</code>)</td></tr>
+<tr><td><code>public_url</code></td><td>External URL clients use to reach the server (e.g. <code>https://mcp.example.com:8080</code>). Used for OAuth discovery (<code>.well-known/oauth-protected-resource</code>) and the Client MCP Wizard. <strong>Required</strong> when <code>host = 0.0.0.0</code> and the server is behind a reverse proxy or exposed via a public DNS name — otherwise the server advertises the literal bind address and remote clients fail to follow the discovery URL. See <a href="#public-url-and-reverse-proxy-deployments">Public URL and reverse-proxy deployments</a> below.</td></tr>
 <tr><td><code>log_level</code></td><td><code>debug</code>, <code>info</code>, <code>warning</code>, <code>error</code>, or <code>critical</code></td></tr>
 <tr><td><code>log_file</code></td><td>Path to log file (parent directory must exist)</td></tr>
 <tr><td><code>auth_token</code></td><td>Bearer token for HTTP/SSE authentication (supports <code>${ENV_VAR}</code>)</td></tr>
@@ -854,6 +855,42 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>verify_ssl</code></td><td>Verify TLS certificates (default: <code>true</code>)</td></tr>
 <tr><td><code>skip_version_check</code></td><td>Skip zabbix-utils version compatibility check (default: <code>false</code>)</td></tr>
 </table>
+
+## Public URL and reverse-proxy deployments
+
+When the server is exposed via a public DNS name, a reverse proxy (nginx, Caddy, Traefik), or runs with `host = "0.0.0.0"`, the bind address differs from the URL clients actually use. The MCP server uses one URL for both **listening** and **OAuth discovery** by default — for `0.0.0.0` deployments that produces a discovery document advertising `https://0.0.0.0:8080/`, which remote MCP clients (Claude Desktop, `mcp-remote`, etc.) cannot follow and bail out with a 404.
+
+`[server].public_url` overrides what the server advertises in the OAuth discovery endpoints (`.well-known/oauth-protected-resource` and `.well-known/oauth-authorization-server`) and what the Client MCP Wizard prints into the snippet and curl quick-test:
+
+```toml
+[server]
+host = "0.0.0.0"                                       # bind on all interfaces
+port = 8080
+public_url = "https://mcp.example.com:8080"            # what clients actually use
+```
+
+**Common deployment patterns:**
+
+| Scenario | `host` | `tls_cert_file` | `public_url` |
+|---|---|---|---|
+| Local development, single-host clients | `127.0.0.1` | unset | unset (auto-derives `http://127.0.0.1:8080`) |
+| Public LAN deployment, native TLS | `0.0.0.0` | set | `https://mcp.example.com:8080` |
+| Public deployment behind a reverse proxy that terminates TLS | `127.0.0.1` | unset | `https://mcp.example.com` (proxy maps :443 -> internal :8080) |
+| Docker exposed via published port + public DNS | `0.0.0.0` | set | `https://mcp.example.com:8443` |
+
+**Validation rules** (enforced both at startup and in the admin portal):
+- Must start with `http://` or `https://`.
+- Must be `https://` when `tls_cert_file` is set.
+- No path / query / fragment — the `/mcp` or `/sse` suffix is appended automatically.
+- Host must not be a wildcard bind address (`0.0.0.0`, `::`).
+
+**How to set it:**
+- Admin portal — `Settings -> MCP Server -> Public URL`. Validation errors surface as a toast in red. Saving requires a server restart (the banner appears automatically).
+- Edit `config.toml` directly and restart the service.
+
+**Detecting a missing override:**
+- Startup banner — the `--- Security status ---` block in the application log shows a `Public URL: NOT SET` warning when `host` is a wildcard and no override is configured.
+- Admin portal — every page (Dashboard, Tokens, Settings, ...) shows a yellow banner until the override is set, with a one-click "Configure" button that scrolls to the field.
 
 ## TLS / HTTPS
 

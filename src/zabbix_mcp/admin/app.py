@@ -346,6 +346,20 @@ class AdminApp:
             "year": datetime.now().year,
             "restart_needed": self.restart_needed,
         }
+        # Detect "host = 0.0.0.0 + no public_url" misconfig - on every
+        # page render so the operator sees the banner until they fix
+        # it. Cheap (just attribute reads, no I/O). When triggered we
+        # also pre-compute the bogus URL the server is currently
+        # advertising so the banner can quote it concretely.
+        srv = self.config.server
+        ctx["public_url_missing"] = (
+            srv.transport in ("http", "sse")
+            and srv.host in ("0.0.0.0", "::")
+            and not (getattr(srv, "public_url", "") or "").strip()
+        )
+        if ctx["public_url_missing"]:
+            scheme = "https" if srv.tls_cert_file else "http"
+            ctx["public_url_missing_advertised"] = f"{scheme}://{srv.host}:{srv.port}/"
 
         # Session user
         session = self._get_session(request)

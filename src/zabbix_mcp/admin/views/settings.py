@@ -33,7 +33,7 @@ BOOL_KEYS = {"compact_output", "enabled"}
 SECTION_CONFIG = {
     "server": {
         "toml_section": "server",
-        "allowed_keys": {"host", "port", "transport", "log_level", "log_file", "compact_output", "response_max_chars"},
+        "allowed_keys": {"host", "port", "transport", "log_level", "log_file", "compact_output", "response_max_chars", "public_url"},
         "min_role": "admin",
     },
     "tls_access": {
@@ -152,6 +152,22 @@ async def settings_update(request: Request) -> Response:
     allowed_keys = section_cfg["allowed_keys"]
 
     form = await request.form()
+
+    # Field-level validation: catch bad input before it lands in
+    # config.toml and bricks the next server start.
+    if "public_url" in allowed_keys and "public_url" in form:
+        public_url_raw = str(form.get("public_url", "") or "").strip()
+        if public_url_raw:
+            try:
+                from zabbix_mcp.config import _validate_public_url
+                # Pass current tls_cert_file so https/http requirement
+                # is enforced consistently with config.py validation.
+                tls = getattr(admin_app.config.server, "tls_cert_file", None)
+                _validate_public_url(public_url_raw, tls)
+            except Exception as exc:
+                return admin_app.flash_redirect(
+                    "/settings", f"Public URL is invalid: {exc}", "danger"
+                )
 
     try:
         doc = load_config_document(admin_app.config_path)

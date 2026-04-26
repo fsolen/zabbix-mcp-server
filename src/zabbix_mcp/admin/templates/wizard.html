@@ -432,6 +432,14 @@
      UX is therefore a manual input - operator types the public host
      (DNS name, public IP, reverse-proxy URL); the auto-detected list
      is hidden behind a <details> as a last-resort hint. #}
+  {% if url_ctx.public_url_locked %}
+  <div class="wiz-host-override" style="border-left-color: var(--color-success);">
+    <strong>&#x1F512; Using <code>[server].public_url</code> from <a href="/settings#mcp-server" style="color:inherit; text-decoration:underline;">Settings</a></strong>
+    <p class="wiz-host-help">
+      The snippet and curl test below use <code>{{ url_ctx.url }}</code>. To change it, update <code>[server].public_url</code> in Settings -> MCP Server -> Public URL. The host override picker is hidden because the canonical URL is already declared.
+    </p>
+  </div>
+  {% endif %}
   {% if url_ctx.needs_override %}
   <div class="wiz-host-override">
     <strong>&#x26A0;&#xFE0F; Server is listening on <code>{{ url_ctx.raw_host }}</code> (all interfaces) - you must tell clients which address to use.</strong>

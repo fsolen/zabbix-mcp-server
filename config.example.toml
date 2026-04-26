@@ -36,6 +36,30 @@ host = "127.0.0.1"
 # TCP port for the HTTP server (1–65535).
 port = 8080
 
+# External URL clients use to reach this MCP server. Set this when the
+# server is exposed via a public DNS name, a reverse proxy, or NAT - or
+# whenever `host` is "0.0.0.0" / "::" and remote clients would otherwise
+# see the literal bind address in OAuth discovery (`.well-known/oauth-
+# authorization-server`) and fail to follow it.
+# Used for:
+#   - OAuth discovery `issuer_url` and `resource_server_url` (so MCP
+#     clients like Claude Desktop / mcp-remote see the right URL during
+#     auth handshake instead of "https://0.0.0.0:8080/").
+#   - The Client MCP Wizard: snippet URLs and the curl quick-test box
+#     use this directly instead of auto-detecting the server's IPs.
+# Rules:
+#   - http:// or https:// only; must be https:// when `tls_cert_file` is
+#     set.
+#   - bare URL only - NO path / query / fragment (the `/mcp` or `/sse`
+#     suffix is appended automatically downstream).
+#   - host part must NOT be a wildcard bind address (0.0.0.0, ::).
+# Empty (default) = legacy auto-derive from `{scheme}://{host}:{port}`.
+# Example for a deployment behind an HTTPS reverse proxy:
+#   public_url = "https://mcp.example.com"
+# Example for direct exposure on a non-standard port with TLS:
+#   public_url = "https://mcp.example.com:8080"
+public_url = ""
+
 # Logging level: "debug", "info", "warning", "error", "critical".
 #   "debug" logs every API call and its parameters - useful for troubleshooting.
 #   "info"  logs connections, disconnections, and startup info (default).

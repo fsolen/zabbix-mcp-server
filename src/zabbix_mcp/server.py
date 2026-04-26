@@ -1744,7 +1744,13 @@ def run_server(
     auth_kwargs: dict[str, Any] = {}
     has_auth = token_store.token_count > 0 or config.server.auth_token
     if has_auth and transport in ("http", "sse"):
-        server_url = f"{scheme}://{host}:{port}"
+        # Prefer the operator's explicit public URL when set (deployments
+        # behind a reverse proxy, NAT, or with the bind host = 0.0.0.0).
+        # Without this, OAuth discovery advertises the literal bind host
+        # (e.g. "https://0.0.0.0:8080/") which remote clients cannot
+        # reach - reported in discussion #19.
+        public_url = (getattr(config.server, "public_url", "") or "").rstrip("/")
+        server_url = public_url or f"{scheme}://{host}:{port}"
         if token_store.token_count > 0:
             auth_kwargs["token_verifier"] = MultiTokenVerifier(token_store)
         else:
@@ -1753,7 +1759,22 @@ def run_server(
             issuer_url=server_url,
             resource_server_url=server_url,
         )
-        logger.info("MCP auth_token: bearer token authentication enabled")
+        if public_url:
+            logger.info(
+                "MCP auth_token: bearer token authentication enabled (advertising %s "
+                "from [server].public_url override)",
+                server_url,
+            )
+        else:
+            logger.info("MCP auth_token: bearer token authentication enabled")
+            if host in ("0.0.0.0", "::"):
+                logger.warning(
+                    "Bind host is %s but [server].public_url is not set - OAuth "
+                    "discovery will advertise '%s' which remote MCP clients "
+                    "cannot reach. Set public_url to the externally-reachable "
+                    "URL (e.g. \"https://mcp.example.com:8080\").",
+                    host, server_url,
+                )
     elif transport in ("http", "sse") and not config.server.auth_token:
         if host == "127.0.0.1":
             logger.info(
@@ -1789,6 +1810,23 @@ def run_server(
                 logger.warning("  TLS:                DISABLED — traffic is unencrypted on %s!", host)
             else:
                 logger.warning("  TLS:                disabled (localhost only)")
+
+        # Public URL (advertised to MCP clients during OAuth discovery).
+        # When unset and bind host is a wildcard, remote clients cannot
+        # follow the discovery URL - flag it loudly.
+        public_url_cfg = (getattr(config.server, "public_url", "") or "").strip()
+        if public_url_cfg:
+            logger.warning("  Public URL:         %s (from [server].public_url)", public_url_cfg)
+        elif host in ("0.0.0.0", "::"):
+            logger.warning(
+                "  Public URL:         NOT SET - OAuth discovery advertises '%s://%s:%d/' "
+                "which remote MCP clients (Claude Desktop, mcp-remote, ...) cannot reach. "
+                "Set [server].public_url in config.toml or via the admin portal "
+                "Settings -> MCP Server -> Public URL.",
+                scheme, host, port,
+            )
+        else:
+            logger.warning("  Public URL:         auto-derived from %s://%s:%d/", scheme, host, port)
 
         # IP allowlist
         if config.server.allowed_hosts:

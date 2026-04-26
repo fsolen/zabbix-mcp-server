@@ -107,6 +107,15 @@
                 <div class="form-hint">Max characters per tool response before truncation (default: 50000, min: 5000). Increase for template export workflows (e.g. 200000 for medium templates, 500000 for large built-in templates).</div>
             </div>
         </div>
+        <div class="settings-row" id="public-url">
+            <div class="settings-label">Public URL</div>
+            <div>
+                <input type="text" name="public_url" class="form-input" value="{{ settings.public_url | default('') }}" placeholder="https://mcp.example.com:8080" {% if current_user_role == 'viewer' %}disabled{% endif %}>
+                <div class="form-hint">
+                    External URL clients use to reach this MCP server. <strong>Required</strong> when host is <code>0.0.0.0</code> and the server is exposed via a public DNS name or reverse proxy. Used in OAuth discovery (advertised to MCP clients during auth) and as the base URL in the Client MCP Wizard. Leave empty to auto-derive from <code>{scheme}://{host}:{port}</code>. No trailing path - the <code>/mcp</code> or <code>/sse</code> suffix is appended automatically. Must be <code>https://</code> when TLS is enabled.
+                </div>
+            </div>
+        </div>
         {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save MCP Server Settings</button>

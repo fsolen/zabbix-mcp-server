@@ -218,8 +218,39 @@ def _resolve_url_context(
 ) -> dict:
     """Build the context for URL composition: scheme, host, port,
     detected IPs (when host = 0.0.0.0), final URL.
+
+    When `[server].public_url` is configured we use it verbatim and
+    skip the host detection / override picker entirely - the operator
+    has already declared the canonical externally-reachable URL.
     """
     config = admin_app.config
+
+    # Public URL override - operator-declared canonical URL (e.g. behind
+    # a reverse proxy, or when the bind host is 0.0.0.0). When set, the
+    # wizard uses it as-is for both the snippet and the curl box; no
+    # host detection or per-NIC override picker is shown.
+    public_url = (getattr(config.server, "public_url", "") or "").rstrip("/")
+    if public_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(public_url)
+        scheme = parsed.scheme or ("https" if config.server.tls_cert_file else "http")
+        port = parsed.port or (443 if scheme == "https" else 80)
+        host = parsed.hostname or config.server.host
+        path = "/sse" if transport == "sse" else "/mcp"
+        # Reuse public_url verbatim (preserves any non-default port the
+        # operator wrote) instead of re-composing from parts.
+        url = f"{public_url}{path}"
+        return {
+            "scheme": scheme,
+            "raw_host": config.server.host,
+            "host": host,
+            "port": port,
+            "needs_override": False,
+            "detected_ips": [],
+            "url": url,
+            "public_url_locked": True,
+        }
+
     scheme = "https" if config.server.tls_cert_file else "http"
     raw_host = config.server.host
     port = getattr(config, "_runtime_port", None) or config.server.port
@@ -242,6 +273,7 @@ def _resolve_url_context(
         "needs_override": needs_override,
         "detected_ips": detected_ips,
         "url": url,
+        "public_url_locked": False,
     }
 
 

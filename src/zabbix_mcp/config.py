@@ -69,6 +69,15 @@ class ServerConfig:
     disabled_tools: list[str] | None = None
     tls_cert_file: str | None = None
     tls_key_file: str | None = None
+    # External URL clients use to reach this server. Overrides the
+    # auto-derived "{scheme}://{host}:{port}" when populating OAuth
+    # discovery (issuer_url + resource_server_url) and the Client MCP
+    # Wizard snippets / curl quick-test box. Required when host is
+    # "0.0.0.0" / "::" and the server is exposed via a public DNS
+    # name or reverse proxy - otherwise discovery advertises the bind
+    # host literal (e.g. "https://0.0.0.0:8080/") and remote clients
+    # cannot follow it. Empty = preserve legacy auto-derive behavior.
+    public_url: str = ""
     cors_origins: list[str] | None = None
     allowed_import_dirs: list[str] | None = None
     allowed_hosts: list[str] | None = None
@@ -178,6 +187,51 @@ TOOL_GROUPS: dict[str, list[str]] = {
 }
 
 
+def _validate_public_url(value: str, tls_cert_file: object) -> str:
+    """Validate the optional `[server].public_url` override.
+
+    Empty string is allowed - falls through to legacy auto-derive.
+    Non-empty must be:
+      - a valid http:// or https:// URL
+      - https:// when tls_cert_file is set (server is serving TLS)
+      - bare URL only - no path, query, or fragment (we append /mcp etc.
+        downstream so a path here would compound)
+      - host part non-empty and not a wildcard bind address
+    """
+    if not value:
+        return ""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(value)
+    except ValueError as e:
+        raise ConfigError(f"'public_url' is not a valid URL: {e}") from e
+    if parsed.scheme not in {"http", "https"}:
+        raise ConfigError(
+            f"'public_url' must start with http:// or https:// (got '{value}')"
+        )
+    if not parsed.hostname:
+        raise ConfigError(f"'public_url' is missing the host part: '{value}'")
+    if parsed.hostname in {"0.0.0.0", "::", "[::]"}:
+        raise ConfigError(
+            f"'public_url' cannot be a wildcard bind address ('{parsed.hostname}'); "
+            "use the actual public DNS name or IP that clients reach"
+        )
+    if parsed.path and parsed.path not in {"", "/"}:
+        raise ConfigError(
+            f"'public_url' must be a bare URL with no path ('{parsed.path}' "
+            "found); the /mcp or /sse path is appended automatically"
+        )
+    if parsed.query or parsed.fragment:
+        raise ConfigError("'public_url' must not contain a query string or fragment")
+    if tls_cert_file and parsed.scheme != "https":
+        raise ConfigError(
+            "'public_url' must use https:// when tls_cert_file is set "
+            f"(got '{value}')"
+        )
+    # Strip trailing slash so downstream concatenation is predictable.
+    return value.rstrip("/")
+
+
 def _expand_tool_groups(tools: list[str]) -> list[str]:
     """Expand group names (e.g. 'monitoring') into individual tool prefixes."""
     expanded: list[str] = []
@@ -245,6 +299,12 @@ def load_config(path: str | Path) -> AppConfig:
     if tls_key_file and not tls_cert_file:
         raise ConfigError("tls_cert_file is required when tls_key_file is set")
 
+    # Public URL override - what we advertise to clients (OAuth discovery,
+    # wizard snippets) instead of the auto-derived "{scheme}://{host}:{port}".
+    # See `_validate_public_url` for the rules. Empty = legacy auto-derive.
+    public_url_raw = server_raw.get("public_url", "") or ""
+    public_url = _validate_public_url(str(public_url_raw).strip(), tls_cert_file)
+
     # CORS configuration
     cors_raw = server_raw.get("cors_origins")
     cors_origins: list[str] | None = None
@@ -298,6 +358,7 @@ def load_config(path: str | Path) -> AppConfig:
         disabled_tools=disabled_tools_filter,
         tls_cert_file=tls_cert_file,
         tls_key_file=tls_key_file,
+        public_url=public_url,
         cors_origins=cors_origins,
         allowed_import_dirs=allowed_import_dirs,
         allowed_hosts=allowed_hosts,

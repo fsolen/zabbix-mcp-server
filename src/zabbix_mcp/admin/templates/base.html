@@ -106,6 +106,22 @@
         </div>
         {% endif %}
 
+        {% if public_url_missing %}
+        <div class="alert alert-warning" style="padding:12px 16px; margin-bottom:20px; border-radius:var(--radius-md); background:rgba(245,158,11,0.1); border:1px solid var(--color-warning); color:var(--color-warning); display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+            <span style="flex:1;">
+                &#x26A0;&#xFE0F; <strong>Public URL not set.</strong>
+                The MCP server is bound to all interfaces but does not know what URL to advertise to clients.
+                Remote MCP clients (Claude Desktop, mcp-remote, ...) will fail at OAuth discovery because the server hands them <code style="font-size:0.9em;">{{ public_url_missing_advertised }}</code> which they cannot reach.
+                {% if current_user_role == 'admin' %}
+                Set <strong>Public URL</strong> in Settings to fix.
+                {% endif %}
+            </span>
+            {% if current_user_role == 'admin' %}
+            <a href="/settings#public-url" class="btn btn-warning btn-sm" style="white-space:nowrap;">Configure</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- HTMX loading indicator -->
         <div class="htmx-indicator" id="loader"></div>
 
