@@ -181,11 +181,29 @@ async def user_detail(request: Request) -> Response:
         confirm_password = str(form.get("confirm_password", "")).strip()
         current_password = str(form.get("current_password", "")).strip()
         new_role = str(form.get("role", "")).strip()
+        current_role = user.get("role", "viewer")
 
         error = None
 
+        # Self role-change is a foot-gun: an admin who downgrades
+        # themselves to viewer locks themselves out of the portal.
+        # Reported 2026-04-27 - tester accidentally did exactly that
+        # on a fresh install with one admin account. Other admins can
+        # still demote them through their own session.
+        if is_self and new_role and new_role != current_role:
+            error = "You cannot change your own role. Ask another admin to do it."
+
+        # The last remaining admin must stay an admin so the operator
+        # can always recover. Pair check with the self-delete guard
+        # below.
+        if not error and current_role == "admin" and new_role and new_role != "admin":
+            existing_users = _get_admin_users(admin_app.config_path)
+            admin_count = sum(1 for u in existing_users.values() if u.get("role") == "admin")
+            if admin_count <= 1:
+                error = "At least one admin account must remain. Promote another user to admin before demoting this one."
+
         # If changing own password, require current password
-        if is_self and new_password:
+        if is_self and new_password and not error:
             if not current_password:
                 error = "Current password is required to change your own password."
             elif not verify_password(current_password, user.get("password_hash", "")):
@@ -276,6 +294,18 @@ async def user_bulk_delete(request: Request) -> Response:
         doc = load_config_document(admin_app.config_path)
         admin = doc.get("admin", {})
         users = admin.get("users", {})
+        # Last-admin protection - reject the whole batch if it would
+        # remove every remaining admin. Counting from `users` (config
+        # snapshot) before we touch it.
+        all_admins = {u for u, d in users.items() if d.get("role") == "admin"}
+        targeted_admins = all_admins.intersection(ids)
+        remaining_admins = all_admins - targeted_admins
+        if all_admins and not remaining_admins:
+            return admin_app.flash_redirect(
+                "/users",
+                f"This batch would remove the last admin ({', '.join(sorted(targeted_admins))}). Keep at least one admin or promote another user first.",
+                "danger",
+            )
         deleted: list[str] = []
         missing: list[str] = []
         for uid in ids:
@@ -323,6 +353,19 @@ async def user_delete(request: Request) -> Response:
         users = admin.get("users", {})
         if username not in users:
             return admin_app.flash_redirect("/users", f"User '{username}' not found.", "danger")
+        # Refuse to remove the last admin - if this user is the only
+        # account with role=admin, deleting them would lock everyone
+        # out of the portal with no recovery short of editing
+        # config.toml on disk.
+        target_role = users[username].get("role", "viewer")
+        if target_role == "admin":
+            admin_count = sum(1 for u in users.values() if u.get("role") == "admin")
+            if admin_count <= 1:
+                return admin_app.flash_redirect(
+                    "/users",
+                    "Cannot delete the last admin account. Promote another user to admin first.",
+                    "danger",
+                )
         del users[username]
         save_config_document(admin_app.config_path, doc)
         logger.info("User '%s' deleted by %s", username, session.user)
