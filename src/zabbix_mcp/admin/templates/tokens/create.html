@@ -38,6 +38,11 @@
 {% endif %}
 
 {% else %}
+{% if error %}
+<div class="alert alert-danger" role="alert" style="padding:12px 16px;margin-bottom:16px;border-radius:var(--radius-md);background:rgba(239,68,68,0.10);border:1px solid var(--color-danger);color:var(--color-danger);">
+    &#x26A0;&#xFE0F; {{ error }}
+</div>
+{% endif %}
 <div class="card">
     {# autocomplete="off" + per-input autocomplete=new-* discourages
        browsers from leaking values from /tokens/<id> (detail/edit)
@@ -48,9 +53,14 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
         <div class="form-group">
-            <label class="form-label" for="name">Token Name</label>
-            <input type="text" id="name" name="name" class="form-input" placeholder="e.g. Claude Desktop - Production" required autocomplete="off">
-            <div class="form-hint">A descriptive name to identify this token.</div>
+            <label class="form-label" for="name">Token Name <span class="text-muted" style="font-weight:400; font-size:0.78rem;">(<span id="name-counter">0</span>/100)</span></label>
+            <input type="text" id="name" name="name" class="form-input"
+                   placeholder="e.g. Claude Desktop - Production"
+                   required autocomplete="off"
+                   maxlength="100"
+                   value="{{ form_name | default('') }}"
+                   oninput="document.getElementById('name-counter').textContent = this.value.length; this.classList.toggle('input-near-limit', this.value.length >= 90);">
+            <div class="form-hint">A descriptive name to identify this token. Maximum 100 characters.</div>
         </div>
 
         <div class="form-group">

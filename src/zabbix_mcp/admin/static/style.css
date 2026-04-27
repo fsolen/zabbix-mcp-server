@@ -639,6 +639,24 @@ textarea.input-invalid {
 }
 .tooltip-icon:hover { color: var(--text-primary); }
 
+/* Defensive overflow guard - any user-controlled text rendered as a
+   page heading (token name, server name, user name, ...) must not
+   blow out the layout. Long names truncate visually with an ellipsis
+   while the full string lives in a title= tooltip. */
+.page-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 80vw;
+}
+
+/* Inputs that approach the maxlength get a subtle warning border so
+   the operator sees the limit before they hit Submit. */
+.input-near-limit {
+    border-color: var(--color-warning) !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
 tbody tr:last-child td {
     border-bottom: none;
 }

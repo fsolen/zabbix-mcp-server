@@ -10,7 +10,7 @@
 {% block content %}
 <div class="page-header">
     <div>
-        <h1 class="page-title">{{ token.name }}</h1>
+        <h1 class="page-title" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60ch;" title="{{ token.name }}">{{ token.name }}</h1>
         <p class="page-subtitle">
             Token prefix: <code class="monospace">{{ token.token_prefix }}</code>
             {% if token.revoked %}
@@ -32,8 +32,9 @@
         <form method="post" action="/tokens/{{ token.id }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
-                <label class="form-label" for="name">Token Name</label>
-                <input type="text" id="name" name="name" class="form-input" value="{{ token.name }}" required>
+                <label class="form-label" for="name">Token Name <span class="text-muted" style="font-weight:400; font-size:0.78rem;">(<span id="name-counter">{{ token.name|length }}</span>/100)</span></label>
+                <input type="text" id="name" name="name" class="form-input" value="{{ token.name }}" required maxlength="100"
+                       oninput="document.getElementById('name-counter').textContent = this.value.length; this.classList.toggle('input-near-limit', this.value.length >= 90);">
             </div>
 
             <div class="form-group">

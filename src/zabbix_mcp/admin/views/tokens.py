@@ -173,21 +173,30 @@ async def token_create(request: Request) -> Response:
     # in another tab sharing the same origin.
     return_to = _safe_return_to(str(form.get("return_to", return_to) or return_to))
     name = str(form.get("name", "")).strip()
-    if not name:
-        return admin_app.render("tokens/create.html", request, {
+    # Re-render context that preserves what the operator already typed
+    # so a validation failure does not wipe the whole form.
+    def _err(msg: str) -> Response:
+        ctx = {
             "active": "tokens",
             "return_to": return_to,
-            "error": "Name is required.",
-        })
+            "error": msg,
+            "form_name": name,
+            "form_ip_allowlist": str(form.get("ip_allowlist", "") or ""),
+            "form_expires_at": str(form.get("expires_at", "") or ""),
+            "form_read_only": "read_only" in form,
+            "form_scopes": str(form.get("scopes", "") or ""),
+            "form_allowed_servers": str(form.get("allowed_servers", "") or ""),
+        }
+        ctx.update(_get_global_context(admin_app))
+        return admin_app.render("tokens/create.html", request, ctx)
+
+    if not name:
+        return _err("Name is required.")
     # Cap token name at 100 chars - prevents the token list table
     # layout breaking on extreme input (reported 2026-04-17 with a
     # 5000-char name that pushed the Delete button off-screen).
     if len(name) > 100:
-        return admin_app.render("tokens/create.html", request, {
-            "active": "tokens",
-            "return_to": return_to,
-            "error": "Token name must be 100 characters or fewer.",
-        })
+        return _err(f"Token name must be 100 characters or fewer (you entered {len(name)}).")
 
     # Parse scopes from hidden input (comma-separated) or checkboxes
     scopes_raw = str(form.get("scopes", "")).strip()
@@ -210,12 +219,7 @@ async def token_create(request: Request) -> Response:
             try:
                 _ipnet(ip, strict=False)
             except ValueError:
-                ctx = {
-                    "active": "tokens", "return_to": return_to,
-                    "error": f"IP allowlist entry '{ip}' is not a valid IP address or CIDR range.",
-                }
-                ctx.update(_get_global_context(admin_app))
-                return admin_app.render("tokens/create.html", request, ctx)
+                return _err(f"IP allowlist entry '{ip}' is not a valid IP address or CIDR range.")
     expires_at = str(form.get("expires_at", "")).strip() or None
     if expires_at:
         # Accept the same ISO 8601 form the token store consumes
@@ -231,12 +235,7 @@ async def token_create(request: Request) -> Response:
             except ValueError:
                 continue
         if not ok:
-            ctx = {
-                "active": "tokens", "return_to": return_to,
-                "error": f"Expiry date '{expires_at}' is not a recognized format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.",
-            }
-            ctx.update(_get_global_context(admin_app))
-            return admin_app.render("tokens/create.html", request, ctx)
+            return _err(f"Expiry date '{expires_at}' is not a recognized format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.")
 
     # Parse allowed_servers
     servers_raw = str(form.get("allowed_servers", "*")).strip()
@@ -254,9 +253,7 @@ async def token_create(request: Request) -> Response:
     # Check for ID collision with existing tokens
     existing_token = admin_app.token_store.get_token(token_id)
     if existing_token is not None:
-        ctx = {"active": "tokens", "return_to": return_to, "error": f"A token with ID '{token_id}' already exists. Choose a different name."}
-        ctx.update(_get_global_context(admin_app))
-        return admin_app.render("tokens/create.html", request, ctx)
+        return _err(f"A token with ID '{token_id}' already exists. Choose a different name.")
 
     # Write to config.toml
     from datetime import datetime, timezone
@@ -323,6 +320,12 @@ async def token_detail(request: Request) -> Response:
         updates = {}
         name = str(form.get("name", "")).strip()
         if name:
+            if len(name) > 100:
+                return admin_app.flash_redirect(
+                    f"/tokens/{token_id}",
+                    f"Token name must be 100 characters or fewer (you entered {len(name)}).",
+                    "danger",
+                )
             updates["name"] = name
 
         scopes_raw = str(form.get("scopes", "")).strip()
