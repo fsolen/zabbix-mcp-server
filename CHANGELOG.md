@@ -48,11 +48,15 @@ same observations.
   the URL the server is currently advertising and offers a
   Configure button that scrolls to the Settings field.
 - **Update check (Bug 34)**: new `admin/update_check.py` module
-  with a daemon poller (1 h interval, 5 s timeout), on-disk cache
-  at `/etc/zabbix-mcp/state/version-cache.json`, and Settings UI
-  toggle (`[admin].update_check_enabled`, default true). Skips
-  pre-release / draft tags. Failed checks (offline, rate limited,
-  DNS) are silent; banner reuses the last successful answer.
+  that polls GitHub Releases lazily on admin login (not on a
+  hourly daemon thread), throttled to once per 30 min so a burst
+  of logins cannot eat the public GitHub rate limit. On-disk cache
+  at `/etc/zabbix-mcp/state/version-cache.json` survives restarts;
+  Settings UI toggle (`[admin].update_check_enabled`, default
+  true). Skips pre-release / draft tags. Failed checks (offline,
+  rate limited, DNS) are silent; banner reuses the last successful
+  answer. Idle deployment with no admin sessions burns zero
+  outbound traffic.
 - **Type-the-name-to-confirm (Bug 30)**: `confirmDeleteTyped()`
   helper requires the operator to type the target's name before
   the destructive button enables. Wired into Users list deletion
