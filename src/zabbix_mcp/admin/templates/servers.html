@@ -55,8 +55,13 @@
         </div>
         <div id="add-test-result" style="margin-bottom:12px;"></div>
         <div style="display:flex; gap:8px;">
-            <button type="button" class="btn btn-ghost" id="add-test-btn" onclick="testNewServer()">&#x1F50C; Test Connection</button>
-            <button type="submit" class="btn btn-primary" id="add-save-btn" disabled>Add Server</button>
+            {# One primary action: test then save in a single click. The
+               separate "Test Connection" + "Add Server" pair was reported
+               as confusing - testers did not realise Add was disabled
+               until Test passed and assumed the form was broken. The
+               handler below fires test-new, and only POSTs the create
+               form when the probe came back green. #}
+            <button type="button" class="btn btn-primary" id="add-save-btn" onclick="testAndAddServer()">&#x2795; Test &amp; Add Server</button>
             <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-server-form').style.display='none'">Cancel</button>
         </div>
     </form>
@@ -98,14 +103,22 @@
         }
     }
 
-    function testNewServer() {
-        var url = document.querySelector('#add-server-form [name=url]').value;
-        var token = document.querySelector('#add-server-form [name=api_token]').value;
-        var ssl = document.querySelector('#add-server-form [name=verify_ssl]').checked;
+    function testAndAddServer() {
+        // Run /servers/test-new first; if green, submit the create form.
+        // Yellow (API online but token rejected) and red both block save
+        // so a misconfigured server cannot land in config.toml.
+        var form = document.getElementById('form-server-create');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        var url = form.querySelector('[name=url]').value;
+        var token = form.querySelector('[name=api_token]').value;
+        var ssl = form.querySelector('[name=verify_ssl]').checked;
         var result = document.getElementById('add-test-result');
-        var saveBtn = document.getElementById('add-save-btn');
-        _setTestResult(result, '', 'Testing...');
-        saveBtn.disabled = true;
+        var btn = document.getElementById('add-save-btn');
+        _setTestResult(result, '', 'Testing connection...');
+        btn.disabled = true;
         var _csrf = document.querySelector('meta[name="csrf-token"]');
         var _headers = {'Content-Type': 'application/x-www-form-urlencoded'};
         if (_csrf) _headers['X-CSRF-Token'] = _csrf.content;
@@ -118,18 +131,16 @@
         .then(function(html) {
             var success = _parseTestResponse(result, html);
             if (success) {
-                saveBtn.disabled = false;
+                form.submit();  // re-enables itself on POST
+            } else {
+                btn.disabled = false;  // let the operator fix and retry
             }
         })
-        .catch(function() { _setTestResult(result, '', 'Test failed'); });
-    }
-    // Reset test when inputs change
-    document.querySelectorAll('#add-server-form input').forEach(function(el) {
-        el.addEventListener('input', function() {
-            document.getElementById('add-save-btn').disabled = true;
-            document.getElementById('add-test-result').textContent = '';
+        .catch(function() {
+            _setTestResult(result, '', 'Test failed - check the URL and try again.');
+            btn.disabled = false;
         });
-    });
+    }
     </script>
 </div>
 {% endif %}
