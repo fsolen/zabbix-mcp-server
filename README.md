@@ -123,7 +123,7 @@ That's the whole procedure — no manual steps afterwards. From v1.15+ the `upda
 **What is preserved (never overwritten):**
 
 - `/etc/zabbix-mcp/config.toml` — your Zabbix URL, API token, MCP tokens, scopes, TLS settings, etc.
-- Admin portal users and sessions (stored in `/var/lib/zabbix-mcp/`).
+- Admin portal users (stored in `[admin.users.*]` inside `config.toml`).
 - Audit log, report templates, and any custom data.
 
 You'll see `✓ Config preserved at /etc/zabbix-mcp/config.toml (not overwritten)` during the update. Check `config.example.toml` afterwards for any new options added in the release.

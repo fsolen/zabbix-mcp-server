@@ -11,7 +11,7 @@
 
 A daemon thread asks GitHub once an hour whether a newer
 zabbix-mcp-server release exists. The result is cached in memory and
-persisted to ``/var/lib/zabbix-mcp/.version-cache`` so a restart does
+persisted to ``/etc/zabbix-mcp/state/version-cache.json`` so a restart does
 not lose the last known answer (saves a check + survives the case
 where GitHub is briefly unreachable).
 

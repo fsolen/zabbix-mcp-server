@@ -27,6 +27,10 @@ same observations.
   releases API once an hour shows an "Update vX.Y available" pill
   in the top bar when a newer stable release is out. Disabled by
   setting `[admin].update_check_enabled = false`.
+- **Form auto-save**: token / user / server create forms snapshot
+  every input change to `localStorage` so a session timeout in the
+  middle of filling them does not lose the operator's draft. After
+  re-login they get a Restore / Discard prompt above the form.
 
 ### Added
 
@@ -44,8 +48,11 @@ same observations.
   the URL the server is currently advertising and offers a
   Configure button that scrolls to the Settings field.
 - **Update check (Bug 34)**: new `admin/update_check.py` module
-  with a daemon poller, on-disk cache at
-  `/var/lib/zabbix-mcp/.version-cache`, and Settings UI toggle.
+  with a daemon poller (1 h interval, 5 s timeout), on-disk cache
+  at `/etc/zabbix-mcp/state/version-cache.json`, and Settings UI
+  toggle (`[admin].update_check_enabled`, default true). Skips
+  pre-release / draft tags. Failed checks (offline, rate limited,
+  DNS) are silent; banner reuses the last successful answer.
 - **Type-the-name-to-confirm (Bug 30)**: `confirmDeleteTyped()`
   helper requires the operator to type the target's name before
   the destructive button enables. Wired into Users list deletion
@@ -59,6 +66,30 @@ same observations.
   drives a Load more button. Default page size dropped 200 -> 50.
 - **Audit CSV export uses `csv.QUOTE_ALL` (Bug 26)** so commas,
   quotes and newlines in the details field cannot break the file.
+- **Form auto-save (Bug 24)**: forms tagged `class="form-autosave"`
+  (token create, user create / edit, server create) snapshot every
+  input change to `localStorage` with a 400 ms debounce. After a
+  session timeout + login redirect the operator sees a "Draft from
+  &lt;time&gt; available" banner above the form with Restore /
+  Discard buttons. Submit clears the cache. Password / API-key /
+  CSRF fields are explicitly excluded from the dump.
+- **Concurrent-edit guard on Settings (Bug 31, partial)**:
+  `views/settings.py` captures `config.toml` mtime on the GET
+  render and round-trips it through a hidden `_cfg_mtime` field.
+  The save handler refuses the write when the current mtime
+  differs ("Another admin saved settings while you were editing.
+  Reload to see the latest values, then re-apply your change.").
+  Catches the silent last-write-wins race when two admins edit
+  Settings concurrently. Token / user / server edit paths still
+  last-write-wins - extension scoped to v1.25.
+- **Inline tooltips (Bug 15, partial)**: new `.tooltip-icon` CSS
+  class (info circle) rendered next to non-trivial fields.
+  Read-only and Verify SSL checkboxes on Add Server now carry a
+  `data-tooltip` explaining the trade-offs; surface on hover or
+  keyboard focus via the existing `[data-tooltip]` rules. More
+  fields will get tooltips incrementally as we touch them - a
+  complete sweep was scoped to v1.25 in favor of getting per-
+  field text right one form at a time.
 - **Showcase report template** carried over from v1.23 unchanged.
 
 ### Changed
@@ -120,51 +151,17 @@ same observations.
   IPs (Bug 23b)** plus a hint for resetting the password
   (`sudo install.sh set-admin-password`) - reported as "I tried
   to find password" / "address with multiple IPs is confusing".
+- **Mobile / responsive polish (Bug 28)**: tighter `cell-truncate`
+  width caps under 768 px (240 → 140 px), header-center wraps so
+  the MCP URL + Restart needed + Update available pill stack on a
+  phone, table-container has explicit `overflow-x:auto` +
+  `-webkit-overflow-scrolling:touch`.
 
 ### Fixed
 
 - **`tokens/create.html` form gets `autocomplete="off"` (Bug 9)**.
   Browser autofill no longer leaks values from `/tokens/<id>` into
   the create form.
-
-### Form auto-save (#24)
-
-- Forms tagged `class="form-autosave"` (token create, user
-  create / edit, server create) snapshot every input change to
-  `localStorage` with a 400 ms debounce. After a session timeout +
-  login redirect the operator sees a "Draft from <time> available"
-  banner with Restore / Discard buttons. Submit clears the cache.
-  Password / API-key / CSRF fields are explicitly excluded from
-  the dump - never persisted client-side.
-
-### Concurrent edit detection (#31)
-
-- `views/settings.py` captures `config.toml` mtime on the GET
-  render and round-trips it through a hidden `_cfg_mtime` field on
-  every settings form. The save handler refuses the write when the
-  current mtime differs ("Another admin saved settings while you
-  were editing. Reload to see the latest values, then re-apply
-  your change."). Catches the silent last-write-wins race when
-  two operators edit Settings at the same time.
-
-### Mobile / responsive polish (#28)
-
-- `static/style.css`: tighter `cell-truncate` width caps under
-  768 px (240 → 140 px), header-center now wraps so the MCP
-  server URL + Restart needed + Update available pill stack on a
-  phone, table-container has explicit `overflow-x:auto` +
-  `-webkit-overflow-scrolling:touch`.
-
-### Inline tooltips (#15)
-
-- New `.tooltip-icon` CSS class (info circle) rendered next to
-  non-trivial fields. The Read-only and Verify SSL checkboxes on
-  the Add Server form now carry a `data-tooltip` explaining the
-  trade-offs; the existing `[data-tooltip]` CSS surfaces it on
-  hover / keyboard focus. More fields will get tooltips
-  incrementally as we touch them - a complete sweep was scoped
-  out for v1.25 in favor of getting the per-field text right one
-  form at a time rather than mass-adding placeholder text.
 
 ### Audited but no action
 
