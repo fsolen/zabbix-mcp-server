@@ -248,6 +248,7 @@
   <div class="wiz-step-header">
     <span class="wiz-step-num">1</span>
     <span class="wiz-step-title">Pick a Zabbix server</span>
+    <span class="tooltip-icon" tabindex="0" data-tooltip="Which Zabbix instance the MCP client will query through this server config. Picks here drive every following step (token allowlist, snippet URL).">&#x1F6C8;</span>
   </div>
 
   {% if servers %}
@@ -279,6 +280,7 @@
   <div class="wiz-step-header">
     <span class="wiz-step-num">2</span>
     <span class="wiz-step-title">Pick an MCP token</span>
+    <span class="tooltip-icon" tabindex="0" data-tooltip="Token the MCP client will send as Bearer auth. Only tokens whose `allowed_servers` covers the chosen server show up. Create a new one if none fit.">&#x1F6C8;</span>
   </div>
 
   {# Banner shown when the MCP server has no auth configured. The
@@ -366,6 +368,7 @@
   <div class="wiz-step-header">
     <span class="wiz-step-num">3</span>
     <span class="wiz-step-title">Pick your AI client</span>
+    <span class="tooltip-icon" tabindex="0" data-tooltip="Each client wants its config in a different shape (Claude Desktop = JSON, Codex = TOML, Claude Code = CLI command). The wizard renders the snippet for the picked client.">&#x1F6C8;</span>
   </div>
 
   <div class="wiz-cards">
@@ -396,6 +399,7 @@
   <div class="wiz-step-header">
     <span class="wiz-step-num">4</span>
     <span class="wiz-step-title">Copy the config</span>
+    <span class="tooltip-icon" tabindex="0" data-tooltip="Paste this snippet into your client's config file (path shown to the right) and restart the client. The token is shown ONCE here - you must paste it now since old tokens cannot be retrieved later (only the hash is stored).">&#x1F6C8;</span>
   </div>
 
   {# Transport picker if the client supports more than one. We mark the

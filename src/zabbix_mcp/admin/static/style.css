@@ -634,9 +634,10 @@ textarea.input-invalid {
    not visually compete with the tooltip popover that overlaps it. */
 .tooltip-icon {
     display: inline-block;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     vertical-align: middle;
+    margin-left: 2px;
     /* Hide any inner text the template might still pass (legacy
        Unicode 🛈 we used pre-1.25). The SVG replaces it. */
     font-size: 0;
@@ -653,11 +654,13 @@ textarea.input-invalid {
 }
 .tooltip-icon:hover,
 .tooltip-icon:focus {
-    /* Hide the ? once the tooltip popover is showing so the two
-       don't visually overlap. Removing the background-image keeps
-       the span itself opaque, so the ::after pseudo-element (the
-       tooltip) inherits full opacity. */
-    background-image: none;
+    /* Slightly darken on hover so the user gets a "this is
+       interactive" cue, but keep the ?-circle visible while the
+       tooltip popover is showing - reported as "po najeti zmizi
+       ten otaznicek" (the question mark vanishes on hover, looks
+       like a glitch). The popover floats above with z-index, no
+       overlap. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23475569' stroke-width='1.5'><circle cx='8' cy='8' r='6.5'/><path d='M5.8 6.2c0-1.2 1-2.2 2.2-2.2s2.2 1 2.2 2.2c0 .9-.5 1.4-1.2 1.8-.7.4-1 .7-1 1.4v.4'/><circle cx='8' cy='12' r='.6' fill='%23475569' stroke='none'/></svg>");
 }
 
 /* Defensive overflow guard - any user-controlled text rendered as a
@@ -2254,11 +2257,11 @@ tbody tr:last-child td {
     border-radius: var(--radius-md, 6px);
     background: var(--bg-card, #1e293b);
     color: var(--text-primary, #e2e8f0);
-    font-size: 0.95rem;
+    font-size: 1rem;
     line-height: 1.5;
     font-weight: 400;
     white-space: normal;
-    max-width: 360px;
+    max-width: 380px;
     width: max-content;
     box-shadow: 0 6px 18px rgba(0,0,0,0.30);
     border: 1px solid var(--border-color, #334155);

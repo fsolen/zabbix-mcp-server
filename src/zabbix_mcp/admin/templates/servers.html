@@ -32,16 +32,16 @@
     <form method="post" action="/servers/create" class="form-autosave" id="form-server-create">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
-            <label class="form-label">Server Name</label>
+            <label class="form-label">Server Name <span class="tooltip-icon" tabindex="0" data-tooltip="Identifier used as the `server` argument in MCP tool calls. Letters, digits, dashes, underscores. Must start with a letter. Can be renamed later (token allowed_servers references update automatically).">&#x1F6C8;</span></label>
             <input type="text" name="name" class="form-input" placeholder="e.g. production, staging" required pattern="[a-zA-Z][a-zA-Z0-9_-]*" value="{{ form_name | default('') }}">
             <small class="text-muted">Identifier used in MCP tool calls (letters, numbers, dashes)</small>
         </div>
         <div class="form-group">
-            <label class="form-label">Zabbix URL</label>
+            <label class="form-label">Zabbix URL <span class="tooltip-icon" tabindex="0" data-tooltip="Full https://host[:port]/zabbix path to the Zabbix frontend. The MCP server appends /api_jsonrpc.php for API calls. Test Connection probes this URL.">&#x1F6C8;</span></label>
             <input type="url" name="url" class="form-input" placeholder="https://zabbix.example.com" required value="{{ form_url | default('') }}">
         </div>
         <div class="form-group">
-            <label class="form-label">API Token</label>
+            <label class="form-label">API Token <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix API token (User settings -> API tokens in the Zabbix UI). Must have permissions for the actions the AI client will perform.">&#x1F6C8;</span></label>
             <input type="text" name="api_token" class="form-input" placeholder="Zabbix API token" required value="{{ form_api_token | default('') }}">
             <small class="text-muted">Create in Zabbix: User settings &rarr; API tokens</small>
         </div>

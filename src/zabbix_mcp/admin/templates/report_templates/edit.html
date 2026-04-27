@@ -26,7 +26,7 @@
 <!-- Name/description -->
 <div class="card mb-4" style="max-width:640px;">
     <div class="form-group">
-        <label class="form-label" for="template-name">Template Name</label>
+        <label class="form-label" for="template-name">Template Name <span class="tooltip-icon" tabindex="0" data-tooltip="Display name for this PDF template. Shown in the template list and the Generate-report dropdown. The internal id is auto-derived from the name (lowercased, special chars replaced).">&#x1F6C8;</span></label>
         {% if t.id %}
         <input type="text" id="template-name" name="display_name" class="form-input" value="{{ t.name | default('') }}">
         {% else %}
@@ -34,7 +34,7 @@
         {% endif %}
     </div>
     <div class="form-group mb-0">
-        <label class="form-label" for="template-desc">Description</label>
+        <label class="form-label" for="template-desc">Description <span class="tooltip-icon" tabindex="0" data-tooltip="Free-form description shown next to the template in the picker. Useful when you have several similar templates (per-customer, per-language, ...).">&#x1F6C8;</span></label>
         <input type="text" id="template-desc" name="description" class="form-input" value="{{ initial_description | default(t.description | default('')) }}" placeholder="Brief description of this template">
     </div>
 </div>
@@ -100,7 +100,7 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="ai-request">Describe the report</label>
+                <label class="form-label" for="ai-request">Describe the report <span class="tooltip-icon" tabindex="0" data-tooltip="Plain-language brief sent to the LLM. The more concrete (number of sections, types of charts, what should be highlighted), the more usable the generated template. The LLM gets a list of available variables automatically; you don't need to list them.">&#x1F6C8;</span></label>
                 <textarea id="ai-request" class="form-textarea" rows="6" style="font-family: var(--font-sans);"
                     placeholder="Example: Weekly SRE review report. Include (1) a big availability gauge at the top, (2) a summary row with total hosts and total events, (3) a table of hosts sorted by event count descending, (4) color-coded CPU/memory/disk bars per host."></textarea>
                 <div class="form-hint">
@@ -113,7 +113,7 @@
                  BYO keys stay in the browser tab; we only send them as
                  part of the request and never persist. -->
             <div class="form-group">
-                <label class="form-label">Provider</label>
+                <label class="form-label">Provider <span class="tooltip-icon" tabindex="0" data-tooltip="'Server default' uses the key configured in Settings (shared by every admin). The other options let you paste a one-off key into this browser tab - never stored, gone on tab close.">&#x1F6C8;</span></label>
                 <select id="ai-provider-select" class="form-select" onchange="aiProviderChanged()">
                     {% if ai_server_configured %}
                     <option value="server" selected>Server default ({{ ai_provider }}{% if ai_model %} / {{ ai_model }}{% endif %})</option>
@@ -140,17 +140,17 @@
 
             <div id="ai-custom-provider" style="display:none;">
                 <div class="form-group">
-                    <label class="form-label" for="ai-api-key">API key</label>
+                    <label class="form-label" for="ai-api-key">API key <span class="tooltip-icon" tabindex="0" data-tooltip="Provider API key for this generation only. Sent over the wire to the provider, never written to disk on the server, never persisted in your browser. Leave empty for Ollama on a passwordless endpoint.">&#x1F6C8;</span></label>
                     <input type="password" id="ai-api-key" class="form-input" placeholder="sk-ant-... | sk-... | AIzaSy..." autocomplete="off" spellcheck="false">
                     <div class="form-hint" id="ai-api-key-hint">Your provider's API key. Not stored - kept only in this browser tab. Leave blank for Ollama on an unauthenticated endpoint.</div>
                 </div>
                 <div class="form-group" id="ai-api-base-group" style="display:none;">
-                    <label class="form-label" for="ai-api-base">API base URL</label>
+                    <label class="form-label" for="ai-api-base">API base URL <span class="tooltip-icon" tabindex="0" data-tooltip="Endpoint URL. Required for Azure OpenAI (per-deployment) and self-hosted Ollama. Other providers leave blank to use the canonical endpoint.">&#x1F6C8;</span></label>
                     <input type="text" id="ai-api-base" class="form-input" placeholder="https://my-resource.openai.azure.com/openai/deployments/gpt-5" autocomplete="off">
                     <div class="form-hint" id="ai-api-base-hint">Required for Azure OpenAI (deployment URL) and custom Ollama hosts. Not stored.</div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="ai-model">Model (optional)</label>
+                    <label class="form-label" for="ai-model">Model (optional) <span class="tooltip-icon" tabindex="0" data-tooltip="Override the provider's default model. Useful if you want to test claude-sonnet-4-6 vs claude-opus-4-7 or pin to a known-good version. Empty = provider default.">&#x1F6C8;</span></label>
                     <input type="text" id="ai-model" class="form-input" placeholder="claude-sonnet-4-6 | gpt-5 | gemini-2.0-flash | llama3.2" autocomplete="off">
                     <div class="form-hint">Leave empty for the provider's default.</div>
                 </div>

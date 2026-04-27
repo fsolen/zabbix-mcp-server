@@ -62,7 +62,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Log Level</div>
+            <div class="settings-label">Log Level <span class="tooltip-icon" tabindex="0" data-tooltip="Default 'info' is right for production. 'debug' is verbose - includes every JSON-RPC payload (great for diagnosing why a tool returns nothing). 'warning' silences successful calls, 'error' silences everything but failures.">&#x1F6C8;</span></div>
             <div>
                 {% set current_log_level = settings.log_level | default('info') | lower %}
                 <select name="log_level" class="form-select" style="width:auto;">
@@ -76,7 +76,7 @@
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                Log File
+                Log File <span class="tooltip-icon" tabindex="0" data-tooltip="Path to write logs to. Empty = stderr only (systemd / docker logs catch it). Set to /var/log/zabbix-mcp/server.log for persistent on-disk logs - remember to update logrotate config separately.">&#x1F6C8;</span>
             </div>
             <div>
                 <input type="text" name="log_file" class="form-input" value="{{ settings.log_file | default('') }}" placeholder="/var/log/zabbix-mcp/server.log">
@@ -229,7 +229,7 @@
         <input type="hidden" name="disabled_tools" id="disabled-tools-input" value="{{ settings.disabled_tools | join(',') if settings.disabled_tools else '' }}">
 
         <div class="settings-row">
-            <div class="settings-label">Tool Allowlist</div>
+            <div class="settings-label">Tool Allowlist <span class="tooltip-icon" tabindex="0" data-tooltip="Comma-separated tool group names. Empty registers all ~225 tools (default). Pick a subset (e.g. 'monitoring, alerts') to slim the AI's tool list and the Zabbix attack surface.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="tools" class="form-input" value="{{ settings.tools | join(', ') if settings.tools else '' }}" placeholder="Leave empty = all tools registered">
                 <div class="form-hint">Comma-separated list of tool groups or prefixes to register. Empty = all ~225 tools. Groups: <code>monitoring, data_collection, alerts, users, administration, extensions</code>. The <code>extensions</code> group covers graph_render, report_generate, anomaly_detect, capacity_forecast, action_prepare / action_confirm, health_check, zabbix_raw_api_call.</div>
@@ -276,21 +276,21 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
-            <div class="settings-label">Company Name</div>
+            <div class="settings-label">Company Name <span class="tooltip-icon" tabindex="0" data-tooltip="Displayed in PDF report headers (e.g. 'initMAX / Availability Report'). Visible to anyone the report is shared with.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="report_company" class="form-input" value="{{ settings.report_company | default('') }}" placeholder="initMAX s.r.o.">
                 <div class="form-hint">Displayed in report headers (e.g. "Company / Availability Report").</div>
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Report Subtitle</div>
+            <div class="settings-label">Report Subtitle <span class="tooltip-icon" tabindex="0" data-tooltip="Optional second line under the company name in PDF report headers. Leave blank if you only want the company name.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="report_subtitle" class="form-input" value="{{ settings.report_subtitle | default('IT Monitoring Service') }}">
                 <div class="form-hint">Shown below the company logo in reports.</div>
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Report Logo</div>
+            <div class="settings-label">Report Logo <span class="tooltip-icon" tabindex="0" data-tooltip="PNG / JPG / SVG drawn in the top-left of every PDF report. Max 5 MB. SVG renders sharpest at any size; PNG should be 2x retina (~600 px wide).">&#x1F6C8;</span></div>
             <div>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="text" name="report_logo" class="form-input" value="{{ settings.report_logo | default('') }}" placeholder="/etc/zabbix-mcp/logo.png" readonly>
@@ -332,7 +332,7 @@
            #}
         <div class="settings-row">
             <div class="settings-label">
-                Admin Port
+                Admin Port <span class="tooltip-icon" tabindex="0" data-tooltip="Separate port for the admin portal you are using right now. Default 9090. Picking the same port as MCP would collide. Restart required to apply.">&#x1F6C8;</span>
             </div>
             <div>
                 <div class="number-input-group">
@@ -344,7 +344,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Check for updates</div>
+            <div class="settings-label">Check for updates <span class="tooltip-icon" tabindex="0" data-tooltip="Polls the GitHub releases API once an hour. When a newer stable tag is found, an 'Update vX.Y available' pill appears in the top bar. Disable for fully air-gapped deployments.">&#x1F6C8;</span></div>
             <div>
                 <label class="toggle-label">
                     <span class="toggle">
@@ -429,7 +429,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Model</div>
+            <div class="settings-label">Model <span class="tooltip-icon" tabindex="0" data-tooltip="Specific model name (e.g. claude-sonnet-4-6, gpt-5, gemini-2.0-flash, llama3.2). Leave blank for the provider's default. Smaller models are faster but produce shorter / less accurate templates.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="model" class="form-input" value="{{ settings.ai_model | default('') }}" placeholder="claude-sonnet-4-6 | gpt-5 | gemini-2.0-flash | llama3.2">
                 <div class="form-hint" id="ai-model-hint">Leave empty for the provider's default. Provider defaults: Anthropic <code>claude-sonnet-4-6</code>, OpenAI <code>gpt-5</code>, Gemini <code>gemini-2.0-flash</code>, Ollama <code>llama3.2</code>, Mistral <code>mistral-small-latest</code>, Groq <code>llama-3.3-70b-versatile</code>.</div>
@@ -447,7 +447,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Max tokens</div>
+            <div class="settings-label">Max tokens <span class="tooltip-icon" tabindex="0" data-tooltip="Upper cap on the LLM's output length per template generation. 8000 fits a single A4 PDF report; raise to 16000+ if your generated templates routinely get truncated. Each provider counts tokens slightly differently.">&#x1F6C8;</span></div>
             <div>
                 <div class="number-input-group">
                     <button type="button" class="num-btn num-minus">&minus;</button>
