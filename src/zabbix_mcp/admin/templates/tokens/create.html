@@ -17,8 +17,13 @@
 </div>
 
 {% if created_token %}
-<!-- Token created successfully — show once -->
-<div class="token-display">
+{# Token created successfully - show once. Scroll into view on
+   load so the operator does not miss it; on a small viewport the
+   page header + Public-URL banner + global flash bar can push the
+   token below the fold. Reported 2026-04-27 with a video of a
+   fresh creation where the success card was not visible without
+   scrolling. #}
+<div class="token-display" id="token-display">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
         <span class="text-success" style="font-weight:600;">&#x2713; Token created successfully</span>
         <button class="btn btn-ghost btn-sm" onclick="copyToClipboard('{{ created_token }}', this)">&#x1F4CB; Copy</button>
@@ -26,6 +31,16 @@
     <div class="token-value">{{ created_token }}</div>
     <div class="token-warning">&#x26A0; This token will not be shown again. Copy it now and store it securely.</div>
 </div>
+<script>
+    // Bring the freshly-created token into view on page load
+    // regardless of how tall the banners above happen to be.
+    (function () {
+        var el = document.getElementById('token-display');
+        if (el && el.scrollIntoView) {
+            el.scrollIntoView({behavior: 'smooth', block: 'start'});
+        }
+    })();
+</script>
 {% if continue_to %}
 {# URL fragment (#prefill_token=...) carries the raw token to the wizard
    so it can pre-fill the bearer field. Fragments are NOT sent to the
