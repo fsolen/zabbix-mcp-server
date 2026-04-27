@@ -438,13 +438,18 @@ async def server_test_new(request: Request) -> Response:
         for entry in addrinfo:
             ip = entry[4][0]
             all_ips.add(ip)
+        # Check if all IPs are private/internal
+        all_private = True
         for ip in all_ips:
             try:
                 addr = _ip(ip)
-                if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-                    return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
+                if not (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved):
+                    all_private = False
+                    break
             except ValueError:
                 continue
+        if all_private and all_ips:
+            return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
     except (socket.gaierror, ValueError):
         pass  # Let ZabbixAPI handle DNS errors
 
