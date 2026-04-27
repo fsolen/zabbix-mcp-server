@@ -628,16 +628,37 @@ textarea.input-invalid {
 .status-label-warn    { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.45); color: #f59e0b; }
 .status-label-danger  { background: rgba(239,68,68,0.10);  border-color: rgba(239,68,68,0.45);  color: #ef4444; }
 
-/* Tooltip helper icon next to labeled fields - mouse + keyboard
-   surface the data-tooltip explanation. Uses the existing
-   data-tooltip CSS rules below. */
+/* Tooltip helper icon next to labeled fields - a ? in a circle,
+   centered, drawn as inline SVG so layout never depends on font
+   metrics or emoji rendering. The icon hides on hover so it does
+   not visually compete with the tooltip popover that overlaps it. */
 .tooltip-icon {
-    color: var(--color-muted);
-    font-size: 0.85rem;
-    cursor: help;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    /* Hide any inner text the template might still pass (legacy
+       Unicode 🛈 we used pre-1.25). The SVG replaces it. */
+    font-size: 0;
+    line-height: 0;
+    color: transparent;
     user-select: none;
+    cursor: help;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2394a3b8' stroke-width='1.5'><circle cx='8' cy='8' r='6.5'/><path d='M5.8 6.2c0-1.2 1-2.2 2.2-2.2s2.2 1 2.2 2.2c0 .9-.5 1.4-1.2 1.8-.7.4-1 .7-1 1.4v.4'/><circle cx='8' cy='12' r='.6' fill='%2394a3b8' stroke='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    /* The pseudo-element tooltip needs a non-static parent. */
+    position: relative;
 }
-.tooltip-icon:hover { color: var(--text-primary); }
+.tooltip-icon:hover,
+.tooltip-icon:focus {
+    /* Hide the ? once the tooltip popover is showing so the two
+       don't visually overlap. Removing the background-image keeps
+       the span itself opaque, so the ::after pseudo-element (the
+       tooltip) inherits full opacity. */
+    background-image: none;
+}
 
 /* Defensive overflow guard - any user-controlled text rendered as a
    page heading (token name, server name, user name, ...) must not
@@ -2226,19 +2247,20 @@ tbody tr:last-child td {
 [data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: calc(100% + 6px);
+    bottom: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    padding: 6px 10px;
+    padding: 10px 14px;
     border-radius: var(--radius-md, 6px);
     background: var(--bg-card, #1e293b);
     color: var(--text-primary, #e2e8f0);
-    font-size: 0.75rem;
-    line-height: 1.4;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    font-weight: 400;
     white-space: normal;
-    max-width: 280px;
+    max-width: 360px;
     width: max-content;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.30);
     border: 1px solid var(--border-color, #334155);
     z-index: 1000;
     pointer-events: none;

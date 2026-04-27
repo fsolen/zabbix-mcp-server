@@ -52,6 +52,21 @@ def _validate_config_path(config_path: Path) -> Path:
     return resolved
 
 
+def config_mtime(path: str | Path) -> str:
+    """Return the config.toml mtime in nanoseconds as a string.
+
+    Used as a concurrent-edit guard: GET embeds the value in a hidden
+    `_cfg_mtime` field; POST compares the submitted value to the
+    current mtime and refuses when another admin has touched the file
+    in the meantime. Returns empty string on stat failure - in that
+    case the save proceeds (don't gate on filesystem quirks).
+    """
+    try:
+        return str(os.stat(str(path)).st_mtime_ns)
+    except OSError:
+        return ""
+
+
 def load_config_document(config_path: str | Path) -> "tomlkit.TOMLDocument":
     """Load config.toml as a tomlkit document (preserves comments)."""
     _require_tomlkit()

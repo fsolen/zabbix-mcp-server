@@ -230,14 +230,27 @@ async def server_edit(request: Request) -> Response:
         if not srv:
             return RedirectResponse("/servers", status_code=303)
 
+        from zabbix_mcp.admin.config_writer import config_mtime
         return admin_app.render("servers_edit.html", request, {
             "active": "servers",
             "edit_server_name": server_name,
             "server": srv,
+            "config_mtime": config_mtime(admin_app.config_path),
         })
 
     # POST — save changes
     form = await request.form()
+
+    # Concurrent-edit guard
+    from zabbix_mcp.admin.config_writer import config_mtime
+    submitted_mtime = str(form.get("_cfg_mtime", "") or "")
+    if submitted_mtime and submitted_mtime != config_mtime(admin_app.config_path):
+        return admin_app.flash_redirect(
+            f"/servers/{server_name}/edit",
+            "Another admin saved this config while you were editing. Reload to see the latest values, then re-apply your change.",
+            "danger",
+        )
+
     new_name = str(form.get("name", "")).strip()
     url = str(form.get("url", "")).strip()
     api_token = str(form.get("api_token", "")).strip()
@@ -376,7 +389,16 @@ def _friendly_error(exc: Exception) -> str:
     if "401" in msg or "unauthorized" in lower:
         return "Zabbix returned 401. The API token is invalid or expired."
     if "403" in msg or "forbidden" in lower:
-        return "Zabbix returned 403. The API token lacks permission for this operation."
+        # Cloudflare / generic WAF in front of the Zabbix frontend
+        # randomly returns 403 to direct JSON-RPC POSTs (no browser
+        # cookies / JA3 fingerprint / managed challenge passed). The
+        # symptom on /servers is Test Connection flapping between OK
+        # and Error - reported 2026-04-27 as "obcas OK obcas ze to
+        # nejde". Surface a hint so the operator knows this is not
+        # the API token but the WAF in the way.
+        if "cloudflare" in lower or "cf-ray" in lower or "challenge" in lower:
+            return "Zabbix returned 403 from a Cloudflare-style WAF. Allowlist this server's IP at the proxy/WAF or exclude /api_jsonrpc.php from challenge rules."
+        return "Zabbix returned 403. Either the API token lacks permission OR a WAF / reverse proxy in front of Zabbix is blocking the JSON-RPC POST. Test from the host with curl."
     if "404" in msg or "not found" in lower:
         return "Zabbix returned 404. The URL points outside the Zabbix frontend."
     # Fallback: trim to a clean word boundary so we never end mid-word

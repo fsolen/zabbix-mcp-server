@@ -24,8 +24,9 @@
     {% endif %}
     <form method="post" action="{% if edit_mode %}/users/{{ edit_username }}{% else %}/users/create{% endif %}" autocomplete="off" class="form-autosave" id="form-user-{% if edit_mode %}edit-{{ edit_username }}{% else %}create{% endif %}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if edit_mode %}<input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">{% endif %}
         <div class="form-group">
-            <label class="form-label" for="username">Username</label>
+            <label class="form-label" for="username">Username <span class="tooltip-icon" tabindex="0" data-tooltip="Login name for the admin portal. Lowercase letters, digits, dashes, underscores. 2-50 characters. Cannot be renamed - delete and recreate.">&#x1F6C8;</span></label>
             {% if edit_mode %}
             <input type="text" id="username" name="username" class="form-input" value="{{ edit_username }}" readonly style="opacity:0.7;">
             {% else %}
@@ -35,7 +36,7 @@
 
         {% if edit_mode and is_self %}
         <div class="form-group">
-            <label class="form-label" for="current_password">Current Password</label>
+            <label class="form-label" for="current_password">Current Password <span class="tooltip-icon" tabindex="0" data-tooltip="Required only when changing your own password. Other admins do not need to enter the user's current password.">&#x1F6C8;</span></label>
             <input type="password" id="current_password" name="current_password" class="form-input"
                    placeholder="Required to change your password" autocomplete="current-password">
             <div class="form-hint">Required when changing your own password.</div>
@@ -43,7 +44,7 @@
         {% endif %}
 
         <div class="form-group">
-            <label class="form-label" for="password">{% if edit_mode %}New Password{% else %}Password{% endif %}</label>
+            <label class="form-label" for="password">{% if edit_mode %}New Password{% else %}Password{% endif %} <span class="tooltip-icon" tabindex="0" data-tooltip="Min 10 characters, must include at least one uppercase letter and one digit. Stored as scrypt hash, never as plaintext.">&#x1F6C8;</span></label>
             <input type="password" id="password" name="password" class="form-input"
                    placeholder="{% if edit_mode %}Leave empty to keep current{% else %}Enter password{% endif %}"
                    {% if not edit_mode %}required{% endif %} autocomplete="new-password" oninput="checkPasswordStrength(this.value)">
@@ -60,14 +61,14 @@
 
         {% if edit_mode %}
         <div class="form-group">
-            <label class="form-label" for="confirm_password">Confirm New Password</label>
+            <label class="form-label" for="confirm_password">Confirm New Password <span class="tooltip-icon" tabindex="0" data-tooltip="Retype the new password to catch typos before it gets hashed.">&#x1F6C8;</span></label>
             <input type="password" id="confirm_password" name="confirm_password" class="form-input"
                    placeholder="Repeat new password" autocomplete="new-password">
         </div>
         {% endif %}
 
         <div class="form-group">
-            <label class="form-label" for="role">Role</label>
+            <label class="form-label" for="role">Role <span class="tooltip-icon" tabindex="0" data-tooltip="Admin: full access (users, settings, all writes). Operator: tokens + report templates + view servers. Viewer: read-only browsing of audit log and token list.">&#x1F6C8;</span></label>
             <select id="role" name="role" class="form-select" required>
                 <option value="viewer" {% if edit_role == 'viewer' or form_role == 'viewer' %}selected{% endif %}>Viewer — Read-only access</option>
                 <option value="operator" {% if edit_role == 'operator' or form_role == 'operator' %}selected{% endif %}>Operator — Manage tokens and templates</option>

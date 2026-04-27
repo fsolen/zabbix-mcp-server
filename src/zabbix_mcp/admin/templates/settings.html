@@ -30,7 +30,7 @@
             <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
             <div class="settings-label">
-                MCP Listen Host
+                MCP Listen Host <span class="tooltip-icon" tabindex="0" data-tooltip="Network interface the MCP server binds to. 127.0.0.1 = local-only (safest). 0.0.0.0 = listen on every interface (then set Public URL below for OAuth).">&#x1F6C8;</span>
             </div>
             <div>
                 <input type="text" name="host" class="form-input" value="{{ settings.host | default('127.0.0.1') }}">
@@ -39,7 +39,7 @@
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                MCP Listen Port
+                MCP Listen Port <span class="tooltip-icon" tabindex="0" data-tooltip="TCP port for MCP traffic (default 8080). Picking a port < 1024 needs CAP_NET_BIND_SERVICE or root. Admin portal port is configured separately under Admin Portal.">&#x1F6C8;</span>
             </div>
             <div>
                 <div class="number-input-group">
@@ -51,7 +51,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Transport</div>
+            <div class="settings-label">Transport <span class="tooltip-icon" tabindex="0" data-tooltip="HTTP = streamable HTTP, recommended for browsers and remote MCP clients. SSE = legacy server-sent events. STDIO = subprocess mode (Claude Desktop without admin portal).">&#x1F6C8;</span></div>
             <div>
                 <select name="transport" class="form-select" style="width:auto;">
                     <option value="http" {% if settings.transport == 'http' %}selected{% endif %}>HTTP (Streamable HTTP — recommended)</option>
@@ -84,7 +84,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Compact Output</div>
+            <div class="settings-label">Compact Output <span class="tooltip-icon" tabindex="0" data-tooltip="When ON, get-style tools return only essential fields (host_get, item_get, ...) - cuts LLM token usage by ~70% but hides advanced fields. Turn OFF if the AI needs full Zabbix object detail.">&#x1F6C8;</span></div>
             <div>
                 <label class="toggle-label">
                     <span class="toggle">
@@ -96,7 +96,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Response Max Chars</div>
+            <div class="settings-label">Response Max Chars <span class="tooltip-icon" tabindex="0" data-tooltip="Per-tool-call response size cap before truncation. 50k is fine for monitoring; 200k+ for template export workflows. Going too high means one bad query can flood the AI's context window.">&#x1F6C8;</span></div>
             <div>
                 <div class="number-input-group">
                     <button type="button" class="num-btn num-minus">&minus;</button>
@@ -109,7 +109,7 @@
             </div>
         </div>
         <div class="settings-row" id="public-url">
-            <div class="settings-label">Public URL</div>
+            <div class="settings-label">Public URL <span class="tooltip-icon" tabindex="0" data-tooltip="External URL clients use to reach this server. Required when bind host is 0.0.0.0 - OAuth discovery hands this out, so it must be reachable from the AI client's machine.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="public_url" class="form-input" value="{{ settings.public_url | default('') }}" placeholder="https://mcp.example.com:8080" {% if current_user_role == 'viewer' %}disabled{% endif %}>
                 <div class="form-hint">
@@ -144,7 +144,7 @@
             <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
             <div class="settings-label">
-                TLS Certificate
+                TLS Certificate <span class="tooltip-icon" tabindex="0" data-tooltip="PEM-formatted certificate file. Setting BOTH cert and key turns on HTTPS for MCP and admin portal. Use a publicly-trusted CA (Let's Encrypt) for remote MCP clients.">&#x1F6C8;</span>
             </div>
             <div>
                 <div style="display:flex; gap:8px; align-items:center;">
@@ -161,7 +161,7 @@
         </div>
         <div class="settings-row">
             <div class="settings-label">
-                TLS Key
+                TLS Key <span class="tooltip-icon" tabindex="0" data-tooltip="PEM-formatted private key matching the certificate. Stored with 0600 permissions. Both cert and key must be set to enable HTTPS.">&#x1F6C8;</span>
             </div>
             <div>
                 <div style="display:flex; gap:8px; align-items:center;">
@@ -177,28 +177,28 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">CORS Origins</div>
+            <div class="settings-label">CORS Origins <span class="tooltip-icon" tabindex="0" data-tooltip="Browser cross-origin allowlist. Add the AI client's web origin (e.g. https://claude.ai) so it can hit /mcp from a browser. Empty = CORS strict.">&#x1F6C8;</span></div>
             <div>
                 <textarea name="cors_origins" class="form-input" rows="2" placeholder="https://example.com, https://app.example.com">{{ settings.cors_origins | join(', ') if settings.cors_origins else '' }}</textarea>
                 <div class="form-hint">Comma-separated list of allowed CORS origins. Empty = CORS disabled.</div>
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">IP Allowlist</div>
+            <div class="settings-label">IP Allowlist <span class="tooltip-icon" tabindex="0" data-tooltip="Server-wide IP/CIDR allowlist. Applies BEFORE per-token IP restriction - this is the floor, individual tokens can only narrow it further. Empty = any IP allowed (use with care).">&#x1F6C8;</span></div>
             <div>
                 <textarea name="allowed_hosts" class="form-input" rows="2" placeholder="192.168.1.0/24, 10.0.0.1">{{ settings.allowed_hosts | join(', ') if settings.allowed_hosts else '' }}</textarea>
                 <div class="form-hint">Comma-separated IP/CIDR ranges. Empty = allow all.</div>
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Import Directories</div>
+            <div class="settings-label">Import Directories <span class="tooltip-icon" tabindex="0" data-tooltip="Filesystem paths AI tools can read for `source_file` parameter on configuration_import. Empty = file imports disabled. Anything inside is fair game; pick narrow paths.">&#x1F6C8;</span></div>
             <div>
                 <textarea name="allowed_import_dirs" class="form-input" rows="2" placeholder="/opt/zabbix/import, /tmp/imports">{{ settings.allowed_import_dirs | join(', ') if settings.allowed_import_dirs else '' }}</textarea>
                 <div class="form-hint">Directories allowed for <code>source_file</code> imports. Empty = disabled.</div>
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Rate Limit</div>
+            <div class="settings-label">Rate Limit <span class="tooltip-icon" tabindex="0" data-tooltip="Per-token request budget per minute. 300 covers a typical AI client's monitoring queries; lower it to throttle a runaway agent. 0 = unlimited (not recommended on shared hardware).">&#x1F6C8;</span></div>
             <div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <div class="number-input-group">
@@ -388,7 +388,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Provider</div>
+            <div class="settings-label">Provider <span class="tooltip-icon" tabindex="0" data-tooltip="Pick a built-in cloud provider OR Ollama for self-hosted local LLMs. 'None' means each admin pastes their own key in the editor modal - no shared key on disk.">&#x1F6C8;</span></div>
             <div>
                 <select name="provider" class="form-select" id="ai-provider-select" onchange="updateAiFieldVisibility()">
                     <option value="">None - each admin pastes own key in modal</option>
@@ -404,7 +404,7 @@
             </div>
         </div>
         <div class="settings-row" id="ai-api-base-row">
-            <div class="settings-label">API Base URL</div>
+            <div class="settings-label">API Base URL <span class="tooltip-icon" tabindex="0" data-tooltip="Custom endpoint (Azure OpenAI deployment, self-hosted Ollama at http://localhost:11434/v1). Most providers leave this blank to use the canonical endpoint.">&#x1F6C8;</span></div>
             <div>
                 <input type="text" name="api_base" id="ai-api-base-input" class="form-input" value="{{ settings.ai_api_base | default('') }}" placeholder="https://my-resource.openai.azure.com/openai/deployments/gpt-5">
                 <div class="form-hint" id="ai-api-base-hint">
@@ -413,7 +413,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">API Key</div>
+            <div class="settings-label">API Key <span class="tooltip-icon" tabindex="0" data-tooltip="Provider-side credential. Stored as plaintext in config.toml with 0600 permissions - back up the file accordingly. Empty value on save = keep existing key (does not wipe).">&#x1F6C8;</span></div>
             <div>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="password" name="api_key" class="form-input" value="" placeholder="{% if settings.ai_api_key_configured %}*** key configured (leave blank to keep){% else %}sk-ant-... or sk-...{% endif %}" autocomplete="off" spellcheck="false">
@@ -436,7 +436,7 @@
             </div>
         </div>
         <div class="settings-row">
-            <div class="settings-label">Timeout (seconds)</div>
+            <div class="settings-label">Timeout (seconds) <span class="tooltip-icon" tabindex="0" data-tooltip="HTTP timeout for AI API calls. Reasoning models (Opus, GPT-5) often need 90-150 s for a full template; bump to 300 s if you keep hitting 'read operation timed out'.">&#x1F6C8;</span></div>
             <div>
                 <div class="number-input-group">
                     <button type="button" class="num-btn num-minus">&minus;</button>

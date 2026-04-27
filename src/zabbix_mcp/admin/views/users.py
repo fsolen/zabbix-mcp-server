@@ -162,6 +162,18 @@ async def user_detail(request: Request) -> Response:
 
     if request.method == "POST":
         form = await request.form()
+
+        # Concurrent-edit guard: refuse if config.toml mtime changed
+        # since this form was rendered (another admin saved between).
+        from zabbix_mcp.admin.config_writer import config_mtime
+        submitted_mtime = str(form.get("_cfg_mtime", "") or "")
+        if submitted_mtime and submitted_mtime != config_mtime(admin_app.config_path):
+            return admin_app.flash_redirect(
+                f"/users/{username}",
+                "Another admin saved this config while you were editing. Reload to see the latest values, then re-apply your change.",
+                "danger",
+            )
+
         new_password = str(form.get("password", "")).strip()
         confirm_password = str(form.get("confirm_password", "")).strip()
         current_password = str(form.get("current_password", "")).strip()
@@ -217,12 +229,14 @@ async def user_detail(request: Request) -> Response:
             logger.error("Failed to update user: %s", e)
             return admin_app.flash_redirect(f"/users/{username}", f"Failed to update: {e}", "danger")
 
+    from zabbix_mcp.admin.config_writer import config_mtime
     return admin_app.render("users/create.html", request, {
         "active": "users",
         "edit_mode": True,
         "edit_username": username,
         "edit_role": user.get("role", "viewer"),
         "is_self": is_self,
+        "config_mtime": config_mtime(admin_app.config_path),
     })
 
 
@@ -234,22 +248,29 @@ async def user_delete(request: Request) -> Response:
 
     username = request.path_params["username"]
 
-    # Prevent deleting yourself
+    # Prevent deleting yourself - the previous bare 303 looked like a
+    # successful delete, leaving the operator confused why the row was
+    # still there. Surface a clear message.
     if username == session.user:
-        return RedirectResponse("/users", status_code=303)
+        return admin_app.flash_redirect(
+            "/users",
+            "You cannot delete your own account. Sign in as another admin to remove this user.",
+            "danger",
+        )
 
     try:
         doc = load_config_document(admin_app.config_path)
         admin = doc.get("admin", {})
         users = admin.get("users", {})
-        if username in users:
-            del users[username]
-            save_config_document(admin_app.config_path, doc)
-            logger.info("User '%s' deleted by %s", username, session.user)
-            client_ip = request.client.host if request.client else ""
-            write_audit("user_delete", user=session.user, target_type="user", target_id=username, ip=client_ip)
-            admin_app.restart_needed = True
-            return admin_app.flash_redirect("/users", f"User '{username}' deleted. Restart required.")
+        if username not in users:
+            return admin_app.flash_redirect("/users", f"User '{username}' not found.", "danger")
+        del users[username]
+        save_config_document(admin_app.config_path, doc)
+        logger.info("User '%s' deleted by %s", username, session.user)
+        client_ip = request.client.host if request.client else ""
+        write_audit("user_delete", user=session.user, target_type="user", target_id=username, ip=client_ip)
+        admin_app.restart_needed = True
+        return admin_app.flash_redirect("/users", f"User '{username}' deleted. Restart required.")
     except Exception as e:
         logger.error("Failed to delete user: %s", e)
         return admin_app.flash_redirect("/users", f"Failed to delete user: {e}", "danger")

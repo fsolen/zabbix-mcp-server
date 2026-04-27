@@ -76,20 +76,21 @@ SECTION_CONFIG = {
 # to rotate the stored secret; treat that as "keep current value".
 SECRET_KEEP_EMPTY = {"api_key"}
 
+# Integer fields with explicit bounds. Without these, an operator can
+# accidentally submit `timeout = 0` (request blocks until the AI
+# provider gives up - minutes per call) or `max_tokens = 999999999`
+# (one report exhausts the model's budget for a month). Caps land
+# at safe-but-generous values and reject silently-broken extremes.
+INT_BOUNDS = {
+    "port":             (1, 65535),
+    "rate_limit":       (0, 100000),
+    "response_max_chars": (1024, 1_000_000),
+    "timeout":          (5, 600),
+    "max_tokens":       (256, 200_000),
+}
 
-def _config_mtime(path: str) -> str:
-    """Return the config.toml mtime as a string for concurrent-edit
-    detection. The render path emits this in a hidden field; the
-    save path compares the submitted value against the current mtime
-    and rejects when another admin has touched the file in the
-    meantime. Returns empty string when stat fails (don't gate save
-    on filesystem quirks).
-    """
-    try:
-        import os as _os
-        return str(_os.stat(path).st_mtime_ns)
-    except OSError:
-        return ""
+
+from zabbix_mcp.admin.config_writer import config_mtime as _config_mtime  # re-export under old name
 
 
 async def settings_view(request: Request) -> Response:
@@ -252,6 +253,15 @@ async def settings_update(request: Request) -> Response:
                     continue
                 if value.isdigit():
                     value = int(value)
+                    bounds = INT_BOUNDS.get(key)
+                    if bounds is not None:
+                        lo, hi = bounds
+                        if value < lo or value > hi:
+                            return admin_app.flash_redirect(
+                                "/settings",
+                                f"Value for '{key}' is out of range. Must be between {lo} and {hi}.",
+                                "danger",
+                            )
                 config_section[key] = value
             else:
                 continue

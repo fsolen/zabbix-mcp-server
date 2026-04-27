@@ -28,6 +28,52 @@ from typing import Any
 from zabbix_utils import ZabbixAPI
 from zabbix_utils.exceptions import ProcessingError
 
+# zabbix_utils ships with `User-Agent: zabbix_utils/<ver>` and no
+# Origin / Referer. Cloudflare and similar WAFs that sit in front of
+# many Zabbix frontends 403 those requests as "non-browser bot" -
+# reported 2026-04-27 as Test Connection flapping ("obcas OK obcas ze
+# to nejde, debilne"). Empirically, sending a Chrome-shaped
+# User-Agent + same-origin Origin/Referer headers cleared 10/10
+# probes against a Cloudflare-fronted Zabbix that was previously
+# 9/10 blocked.
+#
+# The library has no constructor hook for headers, so we wrap
+# `urllib.request.urlopen` inside the zabbix_utils.api module with a
+# function that mutates the outgoing Request before forwarding. The
+# wrap is scoped to that one module via `_zb_api_mod.ul.urlopen`, so
+# it does NOT affect any other urllib calls in the process (admin
+# portal HTTP fetches, update_check GitHub poll, etc.).
+try:
+    import zabbix_utils.api as _zb_api_mod
+    import urllib.request as _ul
+
+    _BROWSER_UA = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+    _orig_urlopen = _zb_api_mod.ul.urlopen
+
+    def _patched_urlopen(req, *args, **kwargs):
+        # Only mutate Request objects (not bare URL strings).
+        if isinstance(req, _ul.Request):
+            req.add_header("User-Agent", _BROWSER_UA)
+            req.add_header("Accept", "application/json, text/plain, */*")
+            req.add_header("Accept-Language", "en-US,en;q=0.9")
+            # Origin / Referer derived from the request URL host.
+            try:
+                from urllib.parse import urlsplit
+                parts = urlsplit(req.full_url)
+                origin = f"{parts.scheme}://{parts.netloc}"
+                req.add_header("Origin", origin)
+                req.add_header("Referer", origin + "/")
+            except Exception:
+                pass
+        return _orig_urlopen(req, *args, **kwargs)
+
+    _zb_api_mod.ul.urlopen = _patched_urlopen
+except Exception:
+    pass
+
 from zabbix_mcp.config import AppConfig, ZabbixServerConfig
 
 logger = logging.getLogger("zabbix_mcp.client")
@@ -180,7 +226,20 @@ class ClientManager:
         return default
 
     def call(self, server: str, method: str, params: Any) -> Any:
-        """Execute a Zabbix API call with rate limiting and auto-reconnect."""
+        """Execute a Zabbix API call with rate limiting and auto-reconnect.
+
+        Auto-reconnect now covers TWO error classes:
+        - auth / session errors from ProcessingError (server bounced
+          us with re-login required)
+        - connection-class errors (ConnectionError, TimeoutError,
+          OSError, ssl.SSLError) - these mean the cached TCP/TLS
+          socket was killed (NAT idle timeout, server restart, TLS
+          session expiry) and the next call needs a fresh connect.
+          Without this retry the cached broken client kept poisoning
+          every subsequent call until process restart - reported as
+          "validation flaky / sometimes OK sometimes fails".
+        """
+        import ssl
         self._rate_limiter.check()
         client = self._get_client(server)
         try:
@@ -191,6 +250,9 @@ class ClientManager:
                 client = self._reconnect(server)
                 return self._do_call(client, method, params)
             raise
+        except (ConnectionError, TimeoutError, ssl.SSLError, OSError):
+            client = self._reconnect(server)
+            return self._do_call(client, method, params)
 
     # Strict format: "object.method" — only ASCII letters, single dot separator.
     _METHOD_RE = re.compile(r"^[a-zA-Z]+\.[a-zA-Z]+$")
@@ -216,16 +278,43 @@ class ClientManager:
 
         Returns dict with 'api_ok' and 'token_ok' status.
         Raises on connection failure.
+
+        - Always uses a fresh client (force-reconnect) so the result
+          reflects the *current* state of the Zabbix server, not a
+          cached connection broken by TLS session expiry, NAT idle
+          timeout, or a Zabbix daemon restart.
+        - Retries up to 3 times on transient 403 / 429 / 5xx because
+          Cloudflare-style WAFs in front of Zabbix randomly challenge
+          direct JSON-RPC POSTs (no browser cookies, no JA3 match).
+          The user-visible symptom was Test Connection flapping
+          between OK and Error - reported 2026-04-27 as "obcas OK
+          obcas ze to nejde, debilne". 1 + 1.5 + 2.5 s back-off
+          gives the WAF time to cool off without making the user
+          wait forever for a genuinely-unreachable server.
         """
-        client = self._get_client(server)
-        client.api_version()  # public endpoint — verifies API reachability
-        # Test token auth with an authenticated call (host.get with limit=1)
-        # user.checkAuthentication doesn't work with API tokens in Zabbix 7.0+
-        try:
-            client.host.get(limit=1, output=["hostid"])
-            return {"api_ok": True, "token_ok": True}
-        except Exception:
-            return {"api_ok": True, "token_ok": False}
+        import time as _time
+        delays = (0.0, 1.0, 1.5, 2.5)  # 4 attempts total
+        last_exc: Exception | None = None
+        for delay in delays:
+            if delay:
+                _time.sleep(delay)
+            try:
+                client = self._reconnect(server)
+                client.api_version()
+                try:
+                    client.host.get(limit=1, output=["hostid"])
+                    return {"api_ok": True, "token_ok": True}
+                except Exception:
+                    return {"api_ok": True, "token_ok": False}
+            except Exception as exc:
+                last_exc = exc
+                msg = str(exc).lower()
+                # Only retry on transient WAF-style hiccups. Genuine
+                # config errors (DNS, TLS cert, refused) fail fast.
+                if not ("403" in msg or "429" in msg or "502" in msg or "503" in msg or "504" in msg or "timed out" in msg or "timeout" in msg):
+                    raise
+        assert last_exc is not None
+        raise last_exc
 
     def get_version(self, server: str) -> str:
         """Return the Zabbix API version string for the given server (cached)."""

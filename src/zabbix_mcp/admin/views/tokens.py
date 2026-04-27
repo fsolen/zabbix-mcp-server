@@ -317,6 +317,20 @@ async def token_detail(request: Request) -> Response:
 
     if request.method == "POST" and session.role != "viewer":
         form = await request.form()
+
+        # Concurrent-edit guard: GET embedded the config.toml mtime in
+        # a hidden _cfg_mtime field. If another admin saved the same
+        # file between GET and POST, refuse this submit so we don't
+        # silently overwrite their change.
+        from zabbix_mcp.admin.config_writer import config_mtime
+        submitted_mtime = str(form.get("_cfg_mtime", "") or "")
+        if submitted_mtime and submitted_mtime != config_mtime(admin_app.config_path):
+            return admin_app.flash_redirect(
+                f"/tokens/{token_id}",
+                "Another admin saved this config while you were editing. Reload to see the latest values, then re-apply your change.",
+                "danger",
+            )
+
         updates = {}
         name = str(form.get("name", "")).strip()
         if name:
@@ -388,10 +402,12 @@ async def token_detail(request: Request) -> Response:
             logger.error("Failed to update token: %s", e)
             return admin_app.flash_redirect(f"/tokens/{token_id}", f"Failed to save: {e}", "danger")
 
+    from zabbix_mcp.admin.config_writer import config_mtime
     ctx = {
         "active": "tokens",
         "token": token,
         "token_id": token_id,
+        "config_mtime": config_mtime(admin_app.config_path),
     }
     ctx.update(_get_global_context(admin_app))
     return admin_app.render("tokens/detail.html", request, ctx)
