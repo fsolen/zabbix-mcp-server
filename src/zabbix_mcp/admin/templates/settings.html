@@ -27,6 +27,7 @@
     <div class="form-hint" style="margin-bottom:12px;">&#x26A0;&#xFE0F; All changes in this section require a <strong>server restart</strong> to take effect.</div>
     <form method="post" action="/settings/server">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
             <div class="settings-label">
                 MCP Listen Host
@@ -140,6 +141,7 @@
     </div>
     <form method="post" action="/settings/tls_access">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
             <div class="settings-label">
                 TLS Certificate
@@ -223,6 +225,7 @@
     <div class="form-hint" style="margin-bottom:12px;">&#x26A0;&#xFE0F; All changes in this section require a <strong>server restart</strong> to take effect.</div>
     <form method="post" action="/settings/tools">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <input type="hidden" name="disabled_tools" id="disabled-tools-input" value="{{ settings.disabled_tools | join(',') if settings.disabled_tools else '' }}">
 
         <div class="settings-row">
@@ -271,6 +274,7 @@
     <div class="form-hint" style="margin-bottom:12px;">&#x26A0;&#xFE0F; All changes in this section require a <strong>server restart</strong> to take effect.</div>
     <form method="post" action="/settings/reporting">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
             <div class="settings-label">Company Name</div>
             <div>
@@ -319,6 +323,7 @@
     <div class="form-hint" style="margin-bottom:12px;">&#x26A0;&#xFE0F; All changes in this section require a <strong>server restart</strong> to take effect.</div>
     <form method="post" action="/settings/admin">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         {# Removed the "Enable admin portal" toggle from this UI:
            letting an admin disable the portal from inside the portal
            is a textbook foot-gun (lock yourself out, then have to SSH
@@ -462,11 +467,14 @@
 
 <!-- Hidden upload forms (outside all section forms to avoid nesting) -->
 <form id="upload-logo-form" method="post" action="/settings/upload/logo" enctype="multipart/form-data" style="display:none;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}"></form>
 <form id="upload-tls-cert-form" method="post" action="/settings/upload/tls_cert" enctype="multipart/form-data" style="display:none;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}"></form>
 <form id="upload-tls-key-form" method="post" action="/settings/upload/tls_key" enctype="multipart/form-data" style="display:none;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}"></form>
 {% endblock %}
 
 {% block scripts %}

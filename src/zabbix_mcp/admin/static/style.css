@@ -628,6 +628,17 @@ textarea.input-invalid {
 .status-label-warn    { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.45); color: #f59e0b; }
 .status-label-danger  { background: rgba(239,68,68,0.10);  border-color: rgba(239,68,68,0.45);  color: #ef4444; }
 
+/* Tooltip helper icon next to labeled fields - mouse + keyboard
+   surface the data-tooltip explanation. Uses the existing
+   data-tooltip CSS rules below. */
+.tooltip-icon {
+    color: var(--color-muted);
+    font-size: 0.85rem;
+    cursor: help;
+    user-select: none;
+}
+.tooltip-icon:hover { color: var(--text-primary); }
+
 tbody tr:last-child td {
     border-bottom: none;
 }
@@ -1770,6 +1781,26 @@ tbody tr:last-child td {
 
     .tool-zones {
         flex-direction: column;
+    }
+
+    /* Make wide tables horizontally scrollable instead of letting
+       them overflow the viewport. The table-container already has
+       overflow-x:auto but on small screens we also relax the
+       cell-truncate caps so common columns stay readable. */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    td.cell-truncate { max-width: 140px; }
+    td.cell-truncate-wide { max-width: 200px; }
+
+    /* MCP-available banner can wrap on phone */
+    .header-center {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .update-badge {
+        margin-left: 0 !important;
     }
 }
 

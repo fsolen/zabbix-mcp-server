@@ -44,7 +44,7 @@
        into this create form. The two forms share field names
        (name, scopes, ip_allowlist, ...) on purpose so server-side
        handlers parse uniformly - that makes them autofill bait. #}
-    <form method="post" action="/tokens/create" autocomplete="off">
+    <form method="post" action="/tokens/create" autocomplete="off" class="form-autosave" id="form-token-create">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
         <div class="form-group">

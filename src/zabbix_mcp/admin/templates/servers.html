@@ -22,7 +22,7 @@
 <!-- Add Server Form (hidden by default) -->
 <div id="add-server-form" class="card mb-4" style="display:none; max-width:640px;">
     <h3 style="margin-top:0;">Add Zabbix Server</h3>
-    <form method="post" action="/servers/create">
+    <form method="post" action="/servers/create" class="form-autosave" id="form-server-create">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label class="form-label">Server Name</label>
@@ -39,11 +39,11 @@
             <small class="text-muted">Create in Zabbix: User settings &rarr; API tokens</small>
         </div>
         <div class="form-group" style="display:flex; gap:24px;">
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" name="read_only" checked> Read-only
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" tabindex="0" data-tooltip="When checked, MCP tools that mutate Zabbix data (host_create, item_update, ...) are blocked at the server level. Recommended for production: leave checked and grant per-token write scope only when needed.">
+                <input type="checkbox" name="read_only" checked> Read-only <span class="tooltip-icon">&#x1F6C8;</span>
             </label>
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" name="verify_ssl" checked> Verify SSL
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" tabindex="0" data-tooltip="Verify the Zabbix frontend's TLS certificate against the system trust store. Uncheck only for self-signed certs in dev / lab environments. Off in production = MITM risk.">
+                <input type="checkbox" name="verify_ssl" checked> Verify SSL <span class="tooltip-icon">&#x1F6C8;</span>
             </label>
         </div>
         <div id="add-test-result" style="margin-bottom:12px;"></div>

@@ -209,6 +209,74 @@
         if (_confirmCallback) _confirmCallback();
     }
 
+    // Form auto-save to localStorage - on every input change we
+    // dump the form's serialized state to localStorage. After a
+    // session timeout + login redirect the operator can hit "Restore
+    // my draft" and continue where they left off. Without this they
+    // re-type a 5-minute token-creation form from scratch. Reported
+    // 2026-04-27 ("session timeout uprostred form-fill = ztracena
+    // data"). Forms opt in via class="form-autosave" on the <form>
+    // element; submit clears the cache.
+    document.addEventListener("DOMContentLoaded", function() {
+        var debounceTimers = {};
+        document.querySelectorAll("form.form-autosave").forEach(function(form) {
+            var key = "zmcp_form_" + (form.id || form.action || location.pathname);
+            // Restore offer on page load if we have a draft.
+            try {
+                var draft = JSON.parse(localStorage.getItem(key) || "null");
+                if (draft && draft._ts && (Date.now() - draft._ts) < 24 * 3600 * 1000) {
+                    var notice = document.createElement("div");
+                    notice.style.cssText = "padding:8px 12px;margin:0 0 12px;border-radius:4px;background:rgba(245,158,11,0.10);border:1px solid var(--color-warning);color:var(--color-warning);font-size:0.85rem;display:flex;justify-content:space-between;align-items:center;gap:12px;";
+                    notice.innerHTML = '<span>&#x267B;&#xFE0F; Draft from ' + new Date(draft._ts).toLocaleString() + ' available.</span>';
+                    var btnGroup = document.createElement("span");
+                    var btnRestore = document.createElement("button");
+                    btnRestore.type = "button";
+                    btnRestore.className = "btn btn-warning btn-sm";
+                    btnRestore.textContent = "Restore";
+                    btnRestore.style.marginRight = "6px";
+                    btnRestore.onclick = function() {
+                        Object.keys(draft).forEach(function(name) {
+                            if (name === "_ts") return;
+                            var el = form.querySelector('[name="' + name + '"]');
+                            if (el && el.type !== "password" && el.type !== "hidden") {
+                                if (el.type === "checkbox") el.checked = !!draft[name];
+                                else el.value = draft[name];
+                            }
+                        });
+                        notice.remove();
+                    };
+                    var btnDiscard = document.createElement("button");
+                    btnDiscard.type = "button";
+                    btnDiscard.className = "btn btn-ghost btn-sm";
+                    btnDiscard.textContent = "Discard";
+                    btnDiscard.onclick = function() { localStorage.removeItem(key); notice.remove(); };
+                    btnGroup.appendChild(btnRestore); btnGroup.appendChild(btnDiscard);
+                    notice.appendChild(btnGroup);
+                    form.parentNode.insertBefore(notice, form);
+                }
+            } catch (_) {}
+            // Save on every input event (debounced 400ms).
+            form.addEventListener("input", function() {
+                clearTimeout(debounceTimers[key]);
+                debounceTimers[key] = setTimeout(function() {
+                    var data = { _ts: Date.now() };
+                    new FormData(form).forEach(function(v, k) {
+                        // Skip CSRF + password fields - never persist them.
+                        if (k === "csrf_token" || k === "password" || k === "current_password" || k === "confirm_password" || k === "api_key" || k === "api_token") return;
+                        var el = form.querySelector('[name="' + k + '"]');
+                        if (el && el.type === "checkbox") data[k] = el.checked;
+                        else data[k] = v;
+                    });
+                    try { localStorage.setItem(key, JSON.stringify(data)); } catch (_) {}
+                }, 400);
+            });
+            // Clear cache on successful submit.
+            form.addEventListener("submit", function() {
+                try { localStorage.removeItem(key); } catch (_) {}
+            });
+        });
+    });
+
     // Inline form validation that replaces the floating browser
     // tooltip ("Please fill out this field.") with an auto-scrolled
     // red border + message under each invalid input. Reported

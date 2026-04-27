@@ -127,16 +127,68 @@ same observations.
   Browser autofill no longer leaks values from `/tokens/<id>` into
   the create form.
 
-### Deferred to v1.25 (not yet implemented)
+### Form auto-save (#24)
 
-- Bulk select-all on tokens / users / templates pages (Bug 27)
-- Mobile / responsive layout polish (Bug 28)
-- Concurrent-edit detection with `If-Match` headers (Bug 31)
-- Form auto-save to localStorage on session timeout (Bug 24)
-- Inline tooltips for every non-trivial setting (Bug 15)
+- Forms tagged `class="form-autosave"` (token create, user
+  create / edit, server create) snapshot every input change to
+  `localStorage` with a 400 ms debounce. After a session timeout +
+  login redirect the operator sees a "Draft from <time> available"
+  banner with Restore / Discard buttons. Submit clears the cache.
+  Password / API-key / CSRF fields are explicitly excluded from
+  the dump - never persisted client-side.
 
-These are tracked but did not fit into the v1.24 cycle. Open an
-issue if any of them blocks you so we can prioritize.
+### Concurrent edit detection (#31)
+
+- `views/settings.py` captures `config.toml` mtime on the GET
+  render and round-trips it through a hidden `_cfg_mtime` field on
+  every settings form. The save handler refuses the write when the
+  current mtime differs ("Another admin saved settings while you
+  were editing. Reload to see the latest values, then re-apply
+  your change."). Catches the silent last-write-wins race when
+  two operators edit Settings at the same time.
+
+### Mobile / responsive polish (#28)
+
+- `static/style.css`: tighter `cell-truncate` width caps under
+  768 px (240 → 140 px), header-center now wraps so the MCP
+  server URL + Restart needed + Update available pill stack on a
+  phone, table-container has explicit `overflow-x:auto` +
+  `-webkit-overflow-scrolling:touch`.
+
+### Inline tooltips (#15)
+
+- New `.tooltip-icon` CSS class (info circle) rendered next to
+  non-trivial fields. The Read-only and Verify SSL checkboxes on
+  the Add Server form now carry a `data-tooltip` explaining the
+  trade-offs; the existing `[data-tooltip]` CSS surfaces it on
+  hover / keyboard focus. More fields will get tooltips
+  incrementally as we touch them - a complete sweep was scoped
+  out for v1.25 in favor of getting the per-field text right one
+  form at a time rather than mass-adding placeholder text.
+
+### Audited but no action
+
+- **Search input safety (#29)**: searched all admin views; the
+  only user input that flows into a regex-like context is the
+  username/server-name validation regex which uses hardcoded
+  patterns. The audit-log search uses a substring `in` operator,
+  not regex, so `?search=".*"` is safe.
+- **POST-redirect-GET (#32)**: 101 redirect call sites across the
+  admin views; every state-mutating endpoint already returns
+  `RedirectResponse(303)` or `flash_redirect`. F5 / browser back
+  is safe.
+
+### Deferred to v1.25
+
+- **Bulk select-all on tokens / users / templates pages (Bug 27)**
+  - non-trivial: needs select-all checkbox state machine,
+    bulk-delete endpoint with parsing, plus the type-to-confirm
+    flow extended to a list. Tracked.
+- **Concurrent-edit detection on token / user / server forms
+  (Bug 31, partial)**: only Settings has the mtime guard so far.
+  The other edit paths still last-write-wins between admins.
+
+If any of these block you, open an issue so we can prioritize.
 
 ## v1.23 - 2026-04-17
 

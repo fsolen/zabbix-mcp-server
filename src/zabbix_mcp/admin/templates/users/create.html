@@ -22,7 +22,7 @@
         {{ error }}
     </div>
     {% endif %}
-    <form method="post" action="{% if edit_mode %}/users/{{ edit_username }}{% else %}/users/create{% endif %}" autocomplete="off">
+    <form method="post" action="{% if edit_mode %}/users/{{ edit_username }}{% else %}/users/create{% endif %}" autocomplete="off" class="form-autosave" id="form-user-{% if edit_mode %}edit-{{ edit_username }}{% else %}create{% endif %}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label class="form-label" for="username">Username</label>

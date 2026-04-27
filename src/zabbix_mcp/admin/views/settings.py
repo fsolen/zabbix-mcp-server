@@ -77,6 +77,21 @@ SECTION_CONFIG = {
 SECRET_KEEP_EMPTY = {"api_key"}
 
 
+def _config_mtime(path: str) -> str:
+    """Return the config.toml mtime as a string for concurrent-edit
+    detection. The render path emits this in a hidden field; the
+    save path compares the submitted value against the current mtime
+    and rejects when another admin has touched the file in the
+    meantime. Returns empty string when stat fails (don't gate save
+    on filesystem quirks).
+    """
+    try:
+        import os as _os
+        return str(_os.stat(path).st_mtime_ns)
+    except OSError:
+        return ""
+
+
 async def settings_view(request: Request) -> Response:
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
@@ -134,6 +149,7 @@ async def settings_view(request: Request) -> Response:
         "restart_required_fields": RESTART_REQUIRED,
         "has_legacy_token": has_legacy_token,
         "can_edit": session.role in ("admin", "operator"),
+        "config_mtime": _config_mtime(admin_app.config_path),
     })
 
 
@@ -157,6 +173,18 @@ async def settings_update(request: Request) -> Response:
     allowed_keys = section_cfg["allowed_keys"]
 
     form = await request.form()
+
+    # Concurrent edit detection: the GET render embedded the
+    # config.toml mtime into a hidden field. If another admin has
+    # saved between then and now, refuse this submit so we don't
+    # silently overwrite their change. Reported 2026-04-27.
+    submitted_mtime = str(form.get("_cfg_mtime", "") or "")
+    if submitted_mtime and submitted_mtime != _config_mtime(admin_app.config_path):
+        return admin_app.flash_redirect(
+            "/settings",
+            "Another admin saved settings while you were editing. Reload to see the latest values, then re-apply your change.",
+            "danger",
+        )
 
     # Field-level validation: catch bad input before it lands in
     # config.toml and bricks the next server start.
