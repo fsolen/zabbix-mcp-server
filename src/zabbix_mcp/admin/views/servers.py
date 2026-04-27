@@ -415,28 +415,36 @@ async def server_test_new(request: Request) -> Response:
     from urllib.parse import urlparse
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
-    # Block obvious internal targets
+    # Block only exact matches or true subdomains of blocked hostnames
     _blocked = ("localhost", "127.0.0.1", "::1", "0.0.0.0", "metadata.google", "169.254.169.254")
-    if any(hostname == b or hostname.endswith("." + b) for b in _blocked):
+    def _is_blocked(hn):
+        for b in _blocked:
+            if hn == b:
+                return True
+            # Only block subdomains if b is not an IP
+            if not all(c.isdigit() or c == '.' for c in b):
+                if hn.endswith('.' + b):
+                    return True
+        return False
+    if _is_blocked(hostname):
         return HTMLResponse('<span class="text-danger">URL points to a blocked internal address</span>')
 
-    # SECURITY: resolve hostname and check if it's internal (prevents DNS rebinding / SSRF redirect bypass)
+    # SECURITY: resolve hostname and check if ANY IP is internal (prevents DNS rebinding / SSRF redirect bypass)
     import socket
     from ipaddress import ip_address as _ip
     try:
-        addrinfos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        all_internal = True
-        for addrinfo in addrinfos:
-            resolved_ip = addrinfo[4][0]
+        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        all_ips = set()
+        for entry in addrinfo:
+            ip = entry[4][0]
+            all_ips.add(ip)
+        for ip in all_ips:
             try:
-                addr = _ip(resolved_ip)
-                if not (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved):
-                    all_internal = False
-                    break
+                addr = _ip(ip)
+                if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                    return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
             except ValueError:
                 continue
-        if all_internal and addrinfos:
-            return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
     except (socket.gaierror, ValueError):
         pass  # Let ZabbixAPI handle DNS errors
 
