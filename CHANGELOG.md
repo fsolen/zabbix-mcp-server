@@ -1,22 +1,24 @@
 # Changelog
 
-## v1.25 - unreleased
+## v1.25 - 2026-04-27
 
-Live testing session immediately after v1.24 shipped. Tester ran a fresh install on a public VPS and worked through every form in the admin portal; this release ships fixes for everything they hit.
+Live testing session immediately after v1.24 shipped. Tester ran a fresh install on a public VPS and worked through every form in the admin portal; this release ships fixes for everything they hit, plus a real-time validation layer so the operator sees most of the rejections before they hit Save.
 
 ### Highlights
 
 - **Last-admin protection.** Three new guards on the Users page so an operator cannot accidentally lock themselves out of the portal: (1) you can no longer change your OWN role, only another admin can demote you, (2) the last remaining admin cannot be demoted to operator/viewer, (3) the last remaining admin cannot be deleted (single delete + bulk delete both refuse). Each rejection surfaces a flash explaining what to do instead.
+- **On-blur duplicate-name check on every name input.** Token Name (create + edit), Username, and Server Name now compare against the existing list as soon as the operator tabs out and paint the input red with `⚠ "X" already exists. Pick a different one.` Server-side check stays as the source of truth for race conditions; this is the UX hint that catches the conflict before Save.
 - **Installer credentials banner now matches the actual bind host.** Fresh install on a public VPS with the default `host = 127.0.0.1` used to print the box's public IP as the admin URL, then the operator typed it in their browser and got connection refused. Banner now lists every detected IP only when `host = 0.0.0.0`; otherwise shows just the bound interface plus a hint how to expose externally.
 - **Add Server is one button** instead of two. The previous "Test Connection" + "Add Server" pair was confusing - operators kept hitting Add expecting it to work, found it greyed out, and gave up. Single primary button now runs the test and posts the create form on green.
 - **Test Connection actually validates the token.** Pre-create probe used to hit only `apiinfo.version` (unauthenticated) so a wrong token still returned green. Now it also runs `host.get(limit=1)` and yellow-flags an "API online but token rejected" case, blocking the create until the token works.
 - **Token form / list polish:** expired tokens render as Expired (warning yellow) instead of Active; past expiry dates are rejected at form submit; renaming a token to an existing token's name is rejected with a clear duplicate-name error; long token / template / server names truncate with ellipsis on cards instead of stretching across the page.
 - **Sortable table headers actually sort now.** /tokens and /users had decorative ↕ glyphs but no click handler. New client-side sort helper handles every `<th class="sortable">` (audit log keeps its server-side htmx sort).
+- **Visible "(testing...)" state on Test Connection.** Body sets `hx-indicator="#loader"` which routes the default htmx-request class to the top progress bar, so the trigger button used to look frozen for the 2-30 s probe. Now ghosts to 65 % opacity and appends " (testing...)" while the request is in flight; success ✓ checkmark stays visible 4 s instead of 2.
 
 ### Fixed
 
 - **`/servers` Add: friendlier duplicate-name error.** Was leaking tomlkit's internal "Key" wording (`Failed to add server: Key "shit" already exists.`). Now reads `A server named 'shit' already exists. Pick a different name.` Same fix in `add_config_table()` so any future caller gets a clean message too.
-- **Token edit silently dropped duplicate-name rename.** Tokens with different ids but the same display name were technically allowed (no id collision) but rendered ambiguously. Both create and edit paths now reject duplicate display names with `Another token already uses the name 'shit'. Pick a different one.`
+- **Token edit silently dropped duplicate-name rename.** Tokens with different ids but the same display name were technically allowed (no id collision) but rendered ambiguously. Both create and edit paths now reject duplicate display names with `Another token already uses the name 'X'. Pick a different one.`
 - **Past expiry date.** Form-submit reject on both create and edit, message: `Expiry date '...' is in the past. Pick a future date or leave the field empty for no expiry.`
 - **Expired token shown as Active.** New `is_expired` property on `TokenInfo` (compares `expires_at` to now); list and detail pages render Expired badge when true. Priority order: revoked > expired > active.
 - **Card / page title overflow.** `.card-title`, `.server-card-name`, `.page-title` now truncate long user-controlled text with ellipsis; full string lives in the `title` attribute (visible on hover).
@@ -33,7 +35,7 @@ Live testing session immediately after v1.24 shipped. Tester ran a fresh install
 
 ### Tag policy
 
-- v1.24 tag remains pinned to `e40854f` - the original release plus the two critical CSS fixes (tooltip `?`-circle SVG render in Firefox / strict-CSS browsers, and the `?v={{ version }}` cache-bust on `style.css` so future releases do not need a hard-refresh). Everything else from this list landed on `main` after the tag and ships in v1.25.
+- v1.24 tag remains pinned to `e40854f` - the original release plus the two critical CSS fixes (tooltip `?`-circle SVG render in Firefox / strict-CSS browsers, and the `?v={{ version }}` cache-bust on `style.css` so future releases do not need a hard-refresh). Everything else from this list ships in v1.25.
 
 ## v1.24 - 2026-04-27
 
