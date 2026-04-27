@@ -25,6 +25,9 @@ from zabbix_mcp.reporting.engine import TEMPLATE_DIR, _REPORT_TEMPLATES, REPORTI
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
+# Cap on a single bulk-delete batch. See views.tokens for rationale.
+BULK_DELETE_MAX = 500
+
 CUSTOM_TEMPLATE_DIR = Path("/etc/zabbix-mcp/templates")
 
 def _validate_template_syntax(html_content: str) -> str | None:
@@ -719,10 +722,10 @@ async def template_bulk_delete(request: Request) -> Response:
     ids = [str(s).strip() for s in form.getlist("ids") if str(s).strip()]
     if not ids:
         return admin_app.flash_redirect("/templates", "No templates selected.", "danger")
-    if len(ids) > 500:
+    if len(ids) > BULK_DELETE_MAX:
         return admin_app.flash_redirect(
             "/templates",
-            f"Bulk delete is capped at 500 templates per request (got {len(ids)}).",
+            f"Bulk delete is capped at {BULK_DELETE_MAX} templates per request (got {len(ids)}).",
             "danger",
         )
 

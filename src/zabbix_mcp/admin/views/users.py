@@ -24,6 +24,9 @@ from zabbix_mcp.admin.config_writer import (
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
+# Cap on a single bulk-delete batch. See views.tokens for rationale.
+BULK_DELETE_MAX = 500
+
 
 def _get_admin_users(config_path: str) -> dict:
     """Read [admin.users.*] from config."""
@@ -256,10 +259,10 @@ async def user_bulk_delete(request: Request) -> Response:
     ids = [str(s).strip() for s in form.getlist("ids") if str(s).strip()]
     if not ids:
         return admin_app.flash_redirect("/users", "No users selected.", "danger")
-    if len(ids) > 500:
+    if len(ids) > BULK_DELETE_MAX:
         return admin_app.flash_redirect(
             "/users",
-            f"Bulk delete is capped at 500 users per request (got {len(ids)}).",
+            f"Bulk delete is capped at {BULK_DELETE_MAX} users per request (got {len(ids)}).",
             "danger",
         )
     if session.user in ids:

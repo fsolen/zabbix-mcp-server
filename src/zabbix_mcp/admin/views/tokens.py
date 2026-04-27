@@ -127,6 +127,43 @@ def _get_global_context(admin_app) -> dict:
     }
 
 
+# Cap on a single bulk-delete batch - prevents a malicious / typo'd
+# POST from pinning the tomlkit save loop on tens of thousands of
+# deletions. Generous ceiling - production deployments typically
+# have under 50 active tokens.
+BULK_DELETE_MAX = 500
+
+
+def _validate_and_dedupe_ips(ip_lines: list[str]) -> tuple[list[str], str | None]:
+    """Validate and deduplicate an IP allowlist (token IP Restriction).
+
+    Returns ``(deduped_list, None)`` on success or ``([], error_msg)``
+    on first failure. Catches:
+      - malformed IPv4 / IPv6 addresses or CIDR ranges
+      - duplicate entries after canonicalization, so
+        ``192.168.1.1`` and ``192.168.1.1/32`` cannot both end up in
+        the list, and ``2001:db8::1`` collapses with
+        ``2001:0db8:0000::1``.
+    Both runtime auth checks (``token_store.is_authorized`` and the
+    server-level allowed_hosts middleware) accept either form, but
+    storing duplicates wastes config space and makes diff review
+    harder. Used by token_create and token_detail edit paths.
+    """
+    from ipaddress import ip_network as _ipnet
+    seen: dict[str, str] = {}
+    deduped: list[str] = []
+    for ip in ip_lines:
+        try:
+            norm = str(_ipnet(ip, strict=False))
+        except ValueError:
+            return [], f"IP allowlist entry '{ip}' is not a valid IPv4 / IPv6 address or CIDR range."
+        if norm in seen:
+            return [], f"Duplicate IP allowlist entry: '{ip}' is the same as '{seen[norm]}'."
+        seen[norm] = ip
+        deduped.append(ip)
+    return deduped, None
+
+
 async def token_list(request: Request) -> Response:
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
@@ -214,20 +251,9 @@ async def token_create(request: Request) -> Response:
     # malformed string in config.toml and surface as a 500 at every
     # token-auth check later.
     if allowed_ips:
-        from ipaddress import ip_network as _ipnet
-        # IPv4 and IPv6 both supported; '2001:db8::/32' or '10.0.0.0/8'
-        # work either way. Normalize via str(ip_network()) so
-        # 192.168.1.1, 192.168.1.1/32 and 192.168.001.001 collapse to
-        # the same canonical form for duplicate detection.
-        seen: dict[str, str] = {}
-        for ip in allowed_ips:
-            try:
-                norm = str(_ipnet(ip, strict=False))
-            except ValueError:
-                return _err(f"IP allowlist entry '{ip}' is not a valid IPv4 / IPv6 address or CIDR range.")
-            if norm in seen:
-                return _err(f"Duplicate IP allowlist entry: '{ip}' is the same as '{seen[norm]}'.")
-            seen[norm] = ip
+        allowed_ips, ip_err = _validate_and_dedupe_ips(allowed_ips)
+        if ip_err:
+            return _err(ip_err)
     expires_at = str(form.get("expires_at", "")).strip() or None
     if expires_at:
         # Accept the same ISO 8601 form the token store consumes
@@ -376,23 +402,9 @@ async def token_detail(request: Request) -> Response:
         allowed_ips_raw = str(form.get("ip_allowlist", "")).strip()
         if allowed_ips_raw:
             ips = [ip.strip() for ip in allowed_ips_raw.split("\n") if ip.strip()]
-            seen_ips: dict[str, str] = {}
-            for ip in ips:
-                try:
-                    norm = str(_ipnet(ip, strict=False))
-                except ValueError:
-                    return admin_app.flash_redirect(
-                        f"/tokens/{token_id}",
-                        f"IP allowlist entry '{ip}' is not a valid IPv4 / IPv6 address or CIDR range.",
-                        "danger",
-                    )
-                if norm in seen_ips:
-                    return admin_app.flash_redirect(
-                        f"/tokens/{token_id}",
-                        f"Duplicate IP allowlist entry: '{ip}' is the same as '{seen_ips[norm]}'.",
-                        "danger",
-                    )
-                seen_ips[norm] = ip
+            ips, ip_err = _validate_and_dedupe_ips(ips)
+            if ip_err:
+                return admin_app.flash_redirect(f"/tokens/{token_id}", ip_err, "danger")
             updates["allowed_ips"] = ips
         else:
             updates["allowed_ips"] = []
@@ -547,14 +559,10 @@ async def token_bulk_delete(request: Request) -> Response:
     ids = [str(s).strip() for s in form.getlist("ids") if str(s).strip()]
     if not ids:
         return admin_app.flash_redirect("/tokens", "No tokens selected.", "danger")
-    # Cap the batch so a malicious / typo'd POST cannot pin the
-    # tomlkit save under 10000 deletions. 500 is way above any
-    # realistic operator workflow (production deployments rarely
-    # have more than ~50 active tokens).
-    if len(ids) > 500:
+    if len(ids) > BULK_DELETE_MAX:
         return admin_app.flash_redirect(
             "/tokens",
-            f"Bulk delete is capped at 500 tokens per request (got {len(ids)}).",
+            f"Bulk delete is capped at {BULK_DELETE_MAX} tokens per request (got {len(ids)}).",
             "danger",
         )
 

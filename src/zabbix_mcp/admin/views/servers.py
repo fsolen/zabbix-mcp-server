@@ -32,6 +32,14 @@ _DEFAULT_TIMEOUT = 300
 _MIN_TIMEOUT = 5
 _MAX_TIMEOUT = 3600  # 1 hour; anything longer blocks the MCP thread pool too long.
 
+# Server name as it lands in [zabbix.<name>] in config.toml and as the
+# `server` argument in MCP tool calls. Lowercase or mixed case + digits
+# + dash + underscore. Must start with a letter so TOML keys cannot be
+# confused with numeric tables. The HTML5 `pattern` attribute on the
+# Add Server / Edit Server forms uses the same expression - keep them
+# in sync.
+_SERVER_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+
 
 def _parse_timeout(raw) -> int:
     """Coerce a form value into a safe timeout seconds integer.
@@ -170,7 +178,7 @@ async def server_create(request: Request) -> Response:
             "form_verify_ssl": verify_ssl,
         })
 
-    if not name or not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name):
+    if not name or not _SERVER_NAME_RE.match(name):
         return _err("Invalid server name. Must start with a letter and contain only letters, digits, dashes, and underscores.")
 
     if not url.startswith(("http://", "https://")):
@@ -259,7 +267,7 @@ async def server_edit(request: Request) -> Response:
     request_timeout = _parse_timeout(form.get("request_timeout"))
 
     # Validate new name (allow keeping the same name as a no-op rename)
-    if not new_name or not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", new_name):
+    if not new_name or not _SERVER_NAME_RE.match(new_name):
         return admin_app.flash_redirect(
             f"/servers/{server_name}/edit",
             "Invalid server name. Must start with a letter and contain only letters, digits, dashes, and underscores.",

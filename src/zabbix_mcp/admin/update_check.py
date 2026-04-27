@@ -7,13 +7,17 @@
 # Software Foundation, version 3.
 #
 
-"""Background GitHub release polling for the admin-portal update banner.
+"""Lazy GitHub release check for the admin-portal update banner.
 
-A daemon thread asks GitHub once an hour whether a newer
-zabbix-mcp-server release exists. The result is cached in memory and
-persisted to ``/etc/zabbix-mcp/state/version-cache.json`` so a restart does
-not lose the last known answer (saves a check + survives the case
-where GitHub is briefly unreachable).
+The check fires from a successful admin login (see
+``AdminApp._login`` -> ``trigger_async``) instead of a hourly daemon
+thread, throttled to once per CHECK_INTERVAL_SECONDS so a burst of
+logins won't hammer the public GitHub rate limit. The result is
+cached in memory and persisted to
+``/etc/zabbix-mcp/state/version-cache.json`` so a restart does not
+lose the last known answer (saves a check + survives the case
+where GitHub is briefly unreachable). Idle deployments with no
+admin sessions make zero outbound calls.
 
 Privacy note: this is the only outbound request the admin portal
 makes. It is documented in config.example.toml and
@@ -79,7 +83,13 @@ def _parse_version(s: str) -> tuple:
 
 
 class UpdateChecker:
-    """Owns the latest_version state and the background poller thread."""
+    """Owns the latest_version state and fires throttled lazy polls.
+
+    Single global instance accessed via ``get_checker()``. State
+    survives a restart through the on-disk cache. Polls are
+    triggered by login (or boot for the very first one), never on
+    a permanent background thread.
+    """
 
     def __init__(self) -> None:
         self.current_version: str = CURRENT_VERSION
