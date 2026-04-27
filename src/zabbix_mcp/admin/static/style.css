@@ -1253,6 +1253,35 @@ tbody tr:last-child td {
     font-size: 0.85rem;
 }
 
+/* While the Test Connection htmx request is in flight, htmx adds the
+   `htmx-request` class to the triggering element. Surface that to the
+   operator with a clear "Testing..." indicator on the status row so
+   they know something is happening - reported 2026-04-27 by a viewer
+   who waited several seconds and gave up because the only visible cue
+   was the existing pulse dot. */
+.server-card-meta .status-inline.htmx-request,
+.server-card-footer button.htmx-request {
+    position: relative;
+}
+.server-card-footer button.htmx-request {
+    opacity: 0.65;
+    pointer-events: none;
+}
+.server-card-footer button.htmx-request::after {
+    content: ' (testing...)';
+    color: var(--text-muted);
+    font-style: italic;
+}
+/* Also re-render the success checkmark larger and stay visible
+   longer (was animation: fadeOut 2s forwards - too fast to register
+   on a slow page). */
+.test-ok {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 1rem;
+    animation: fadeOut 4s forwards;
+}
+
 /* ---------- Copy Button ---------- */
 .copy-group {
     display: inline-flex;
