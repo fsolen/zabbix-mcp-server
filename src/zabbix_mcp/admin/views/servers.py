@@ -422,11 +422,20 @@ async def server_test_new(request: Request) -> Response:
 
     # SECURITY: resolve hostname and check if it's internal (prevents DNS rebinding / SSRF redirect bypass)
     import socket
+    from ipaddress import ip_address as _ip
     try:
-        resolved_ip = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)[0][4][0]
-        from ipaddress import ip_address as _ip
-        addr = _ip(resolved_ip)
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        addrinfos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        all_internal = True
+        for addrinfo in addrinfos:
+            resolved_ip = addrinfo[4][0]
+            try:
+                addr = _ip(resolved_ip)
+                if not (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved):
+                    all_internal = False
+                    break
+            except ValueError:
+                continue
+        if all_internal and addrinfos:
             return HTMLResponse('<span class="text-danger">URL resolves to a private/internal IP address</span>')
     except (socket.gaierror, ValueError):
         pass  # Let ZabbixAPI handle DNS errors
