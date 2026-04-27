@@ -198,6 +198,18 @@ async def server_create(request: Request) -> Response:
     except Exception as exc:
         return _err(f"Invalid URL: {exc}")
 
+    # Explicit duplicate-name check before tomlkit raises
+    # `KeyAlreadyPresent: Key "<name>" already exists.` and we have to
+    # reformat its internal "Key" wording into a user-facing
+    # "server name" sentence. Doing the check up front gives us a
+    # clean message and short-circuits before the disk write.
+    try:
+        existing = load_config_document(admin_app.config_path).get("zabbix", {})
+    except Exception:
+        existing = {}
+    if name in existing:
+        return _err(f"A server named '{name}' already exists. Pick a different name.")
+
     try:
         server_data = {
             "url": url,
@@ -552,13 +564,26 @@ async def server_test_new(request: Request) -> Response:
         api = ZabbixAPI(url=url, validate_certs=verify_ssl, skip_version_check=True)
         api.login(token=api_token)
         version = _html.escape(str(api.api_version()))
-        return HTMLResponse(
-            f'<span class="status-dot status-dot-green"></span>'
-            f'<span style="color:var(--color-success);"> Connected — Zabbix {version}</span>'
-        )
     except Exception as e:
         msg = _html.escape(_friendly_error(e))
         return HTMLResponse(
             f'<span class="status-dot status-dot-red"></span>'
             f'<span style="color:var(--color-danger);"> {msg}</span>'
+        )
+    # api_version() is unauthenticated - it only proves the URL
+    # points at a Zabbix frontend. Hit an authenticated method too
+    # so the green status reflects "token works" not just "Zabbix
+    # answered". Reported 2026-04-27 with a video where the dialog
+    # said OK against a wrong api_token. Mirrors the same two-step
+    # check the live `/servers/<n>/test` endpoint already runs.
+    try:
+        api.host.get(limit=1, output=["hostid"])
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-green"></span>'
+            f'<span style="color:var(--color-success);"> Connected &mdash; Zabbix {version}</span>'
+        )
+    except Exception:
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-yellow"></span>'
+            f'<span style="color:var(--color-warning);"> API online (Zabbix {version}) but the API token was rejected. Check that the token has at least read permissions.</span>'
         )

@@ -145,13 +145,21 @@ def update_config_section(config_path: str | Path, section: str, data: dict) -> 
 def add_config_table(config_path: str | Path, section: str, key: str, data: dict) -> None:
     """Add a sub-table. Example: add_config_table(path, "tokens", "my_token", {...})
 
-    Creates [tokens.my_token] section.
+    Creates [tokens.my_token] section. Raises ValueError with a
+    user-facing message when ``key`` already exists in ``section``,
+    instead of bubbling up tomlkit's internal `Key "<x>" already
+    exists.` (the word "Key" leaks the TOML data-model into the
+    admin portal flash bar - reported 2026-04-27 as
+    "pise to key i kdyz je to name").
     """
     _require_tomlkit()
     doc = load_config_document(config_path)
 
     if section not in doc:
         doc.add(section, tomlkit.table())
+
+    if key in doc[section]:
+        raise ValueError(f"'{key}' already exists. Pick a different name.")
 
     sub_table = tomlkit.table()
     for k, v in data.items():
