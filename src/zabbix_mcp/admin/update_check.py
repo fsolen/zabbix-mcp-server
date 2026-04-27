@@ -44,7 +44,13 @@ RELEASES_URL = "https://api.github.com/repos/initMAX/zabbix-mcp-server/releases/
 # entrypoint). /var/lib/zabbix-mcp does not exist in the container
 # image, so we keep persistent state under /etc/zabbix-mcp/state/.
 CACHE_PATH = Path("/etc/zabbix-mcp/state/version-cache.json")
-CHECK_INTERVAL_SECONDS = 3600  # 1 hour
+# Minimum gap between two GitHub polls. The check is now fired lazily
+# from a successful admin login (instead of a hourly daemon thread)
+# so two operators logging in within seconds do not double-poll, and
+# the public GitHub rate limit (60 unauth req/h/IP) cannot be hit
+# even in a burst-login scenario. 30 minutes balances "operator just
+# logged back in expecting fresh info" against "don't hammer GitHub".
+CHECK_INTERVAL_SECONDS = 1800  # 30 min
 HTTP_TIMEOUT_SECONDS = 5
 
 
@@ -81,8 +87,10 @@ class UpdateChecker:
         self.release_url: str | None = None
         self.last_checked: float | None = None
         self.update_available: bool = False
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        # Feature toggle - admin login wires this up at boot. False
+        # means trigger_async() is a no-op so we never reach out.
+        self.enabled: bool = False
+        self._busy = threading.Lock()
         self._load_cache()
 
     # ----- public API used by templates -----
@@ -98,29 +106,49 @@ class UpdateChecker:
 
     # ----- lifecycle -----
     def start(self, enabled: bool) -> None:
-        """Launch the background thread when the feature is enabled."""
-        if not enabled:
+        """Wire up the feature toggle. Replaces the old daemon-thread
+        boot path - the actual GitHub poll is now fired lazily from
+        successful admin logins (see trigger_async). At boot we still
+        kick one async poll so the banner reflects reality even before
+        anyone logs in (status checks from a script / health probe)."""
+        self.enabled = bool(enabled)
+        if not self.enabled:
             logger.info("Update check disabled via [admin].update_check_enabled = false")
             return
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="update-check")
-        self._thread.start()
+        # Boot-time best-effort poll so an admin who logs in within
+        # CHECK_INTERVAL of restart does not get stale cache data.
+        self.trigger_async()
 
     def stop(self) -> None:
-        self._stop.set()
+        # Kept for symmetry with the previous API; nothing to stop now
+        # that the daemon thread is gone.
+        self.enabled = False
 
-    # ----- internals -----
-    def _loop(self) -> None:
-        # First check immediately so the banner can show up on the
-        # first page render after restart, then every CHECK_INTERVAL.
-        while not self._stop.is_set():
+    def trigger_async(self) -> None:
+        """Fire a one-shot GitHub poll in a background thread when
+        the cache is older than CHECK_INTERVAL_SECONDS. Wired into
+        the login-success path so a fresh check happens whenever an
+        operator walks back into the portal, but not faster than
+        once every 30 minutes - a burst of logins won't hammer the
+        public GitHub rate limit (60 req / h / IP). No-op when the
+        feature is disabled."""
+        if not self.enabled:
+            return
+        import time as _time
+        now = _time.time()
+        if self.last_checked is not None and (now - self.last_checked) < CHECK_INTERVAL_SECONDS:
+            return  # cache still fresh
+        # Non-blocking: don't add seconds to the login response.
+        if not self._busy.acquire(blocking=False):
+            return  # another thread is already in flight
+        def _runner() -> None:
             try:
                 self._check()
-            except Exception as exc:  # never let a quirk kill the thread
+            except Exception as exc:
                 logger.debug("Update check failed: %s", exc)
-            self._stop.wait(CHECK_INTERVAL_SECONDS)
+            finally:
+                self._busy.release()
+        threading.Thread(target=_runner, daemon=True, name="update-check-once").start()
 
     def _check(self) -> None:
         req = urllib_request.Request(

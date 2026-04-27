@@ -621,6 +621,16 @@ class AdminApp:
         logger.info("Admin login: user '%s' from %s (role: %s)", username, client_ip, role)
         write_audit("login_success", user=username, details={"role": role}, ip=client_ip)
 
+        # Fire a fresh GitHub release poll on every successful login
+        # (no-op if the feature is disabled or the cache is younger
+        # than CHECK_INTERVAL_SECONDS). The check runs in a daemon
+        # thread so the login redirect response doesn't wait for it.
+        try:
+            from zabbix_mcp.admin.update_check import get_checker
+            get_checker().trigger_async()
+        except Exception:
+            pass
+
         response = RedirectResponse("/", status_code=303)
         # Defense-in-depth: SameSite=Strict blocks most CSRF. The
         # _CsrfMiddleware adds a per-session double-submit token check
