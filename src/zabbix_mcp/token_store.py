@@ -91,6 +91,23 @@ class TokenInfo:
     last_used_ip: str | None = None
     use_count: int = 0
 
+    @property
+    def is_expired(self) -> bool:
+        """Whether this token's expires_at is in the past.
+
+        Used by the admin portal token list to render an Expired
+        badge instead of Active. Returns False when expires_at is
+        unset or unparseable - the runtime auth check
+        (is_authorized) is the canonical place we reject expired
+        tokens; this is just a UX hint for the operator.
+        """
+        if not self.expires_at:
+            return False
+        try:
+            return datetime.fromisoformat(self.expires_at) < datetime.now()
+        except (ValueError, TypeError):
+            return False
+
 
 class TokenStore:
     """In-memory token store loaded from config.

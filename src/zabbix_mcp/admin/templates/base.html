@@ -398,6 +398,60 @@
      *   - One hidden `<form id="bulk-delete-form" method="post" action="<post_url>">`
      *     with CSRF and a placeholder `<input name="ids" multiple>`.
      */
+    /**
+     * Client-side table sort - wired up to every <th class="sortable">
+     * inside a <thead>. Click a header to sort the rows by that column;
+     * click the same header again to flip asc / desc. The arrow glyph
+     * comes from the existing .sortable CSS rule (default ↕, ↑ when
+     * sort-asc, ↓ when sort-desc).
+     *
+     * Why client-side instead of server-side like /audit? The token
+     * and user lists are small (tens of rows), the data is already
+     * fully rendered, and round-tripping through the server for sort
+     * would just add latency. Audit keeps server-side because it
+     * paginates over potentially millions of rows.
+     *
+     * Skips empty-state rows and bulk-select cells so they stay where
+     * they belong regardless of order.
+     */
+    function _zmcpSortTable(th) {
+        var table = th.closest('table');
+        if (!table) return;
+        var thead = th.parentNode;
+        var idx = Array.prototype.indexOf.call(thead.children, th);
+        if (idx < 0) return;
+        var tbody = table.tBodies[0];
+        if (!tbody) return;
+        var rows = Array.from(tbody.rows).filter(function(r) { return !r.hasAttribute('data-empty'); });
+        // Toggle direction. Default to ascending when first clicked.
+        var asc = !th.classList.contains('sort-asc');
+        thead.querySelectorAll('th.sortable').forEach(function(other) {
+            other.classList.remove('sort-asc', 'sort-desc');
+        });
+        th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+        rows.sort(function(a, b) {
+            // Use the cell's text content (stripped) so badge / link
+            // children inside the <td> don't break the comparison.
+            var av = (a.cells[idx] ? a.cells[idx].innerText : '').trim();
+            var bv = (b.cells[idx] ? b.cells[idx].innerText : '').trim();
+            // Try numeric comparison first; fall back to localeCompare
+            // so accented usernames sort the way operators expect.
+            var an = parseFloat(av);
+            var bn = parseFloat(bv);
+            if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+            return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+        });
+        rows.forEach(function(r) { tbody.appendChild(r); });
+    }
+    document.addEventListener('click', function(e) {
+        var th = e.target.closest && e.target.closest('th.sortable');
+        // Skip when the header carries hx-get - that's the audit log,
+        // server-side sort is already wired up via htmx.
+        if (th && !th.hasAttribute('hx-get')) {
+            _zmcpSortTable(th);
+        }
+    });
+
     function bulkSelectAll(checked) {
         document.querySelectorAll('.bulk-select').forEach(function(cb) {
             if (!cb.disabled) cb.checked = !!checked;

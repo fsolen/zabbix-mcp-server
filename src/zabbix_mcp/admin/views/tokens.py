@@ -266,16 +266,20 @@ async def token_create(request: Request) -> Response:
         # (YYYY-MM-DD or full timestamp). Reject everything else
         # so we don't have to deal with parse errors later.
         from datetime import datetime as _dt
-        ok = False
+        parsed_dt: "_dt | None" = None
         for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S"):
             try:
-                _dt.strptime(expires_at, fmt)
-                ok = True
+                parsed_dt = _dt.strptime(expires_at, fmt)
                 break
             except ValueError:
                 continue
-        if not ok:
+        if parsed_dt is None:
             return _err(f"Expiry date '{expires_at}' is not a recognized format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.")
+        # Reject past dates - creating a token that is already
+        # expired makes no sense and the list view used to mark it
+        # as Active anyway. Reported 2026-04-27.
+        if parsed_dt < _dt.now():
+            return _err(f"Expiry date '{expires_at}' is in the past. Pick a future date or leave the field empty for no expiry.")
 
     # Parse allowed_servers and validate each entry refers to a real
     # configured Zabbix server (or is the wildcard '*'). Without this
@@ -429,22 +433,27 @@ async def token_detail(request: Request) -> Response:
 
         expires_at = str(form.get("expires_at", "")).strip()
         if expires_at:
-            # Mirror the create-path expiry-format check so the edit
-            # path doesn't silently accept gibberish dates.
-            ok = False
+            # Mirror the create-path expiry checks (format + must
+            # be in the future) so the edit path stays in sync.
+            from datetime import datetime
+            parsed_dt = None
             for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
                         "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
                 try:
-                    from datetime import datetime
-                    datetime.strptime(expires_at, fmt)
-                    ok = True
+                    parsed_dt = datetime.strptime(expires_at, fmt)
                     break
                 except ValueError:
                     continue
-            if not ok:
+            if parsed_dt is None:
                 return admin_app.flash_redirect(
                     f"/tokens/{token_id}",
                     f"Expiry date '{expires_at}' is not a recognized format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.",
+                    "danger",
+                )
+            if parsed_dt < datetime.now():
+                return admin_app.flash_redirect(
+                    f"/tokens/{token_id}",
+                    f"Expiry date '{expires_at}' is in the past. Pick a future date or leave the field empty for no expiry.",
                     "danger",
                 )
             updates["expires_at"] = expires_at
