@@ -439,11 +439,24 @@
             form.appendChild(inp);
         });
         // Type-to-confirm: operator must type the literal "DELETE N"
-        // string before the destructive button enables.
+        // string before the destructive button enables. We open the
+        // shared confirm modal manually here (instead of calling
+        // confirmDeleteTyped) so the title can read "Delete N tokens"
+        // rather than the redundant "Delete DELETE N".
         var target = 'DELETE ' + n;
-        var msg = 'You are about to delete ' + n + ' ' + label + (n === 1 ? '' : 's')
+        var noun = label + (n === 1 ? '' : 's');
+        var title = 'Delete ' + n + ' ' + noun;
+        var msg = 'You are about to delete ' + n + ' ' + noun
             + '. This action cannot be undone. Type ' + target + ' to confirm.';
-        confirmDeleteTyped(target, msg, 'bulk-delete-form');
+        _confirmTypeTarget = target;
+        document.getElementById('confirm-type-target').textContent = target;
+        document.getElementById('confirm-type-input').value = '';
+        document.getElementById('confirm-type-block').style.display = 'block';
+        showConfirm(title, msg, 'Delete', 'btn-danger', function() {
+            form.submit();
+            closeModal();
+        });
+        document.getElementById('confirm-action-btn').disabled = true;
     }
 
     function triggerRestart() { confirmRestart(); }
