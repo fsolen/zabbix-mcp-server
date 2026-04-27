@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.25 - unreleased
+
+Live testing session immediately after v1.24 shipped. Tester ran a fresh install on a public VPS and worked through every form in the admin portal; this release ships fixes for everything they hit.
+
+### Highlights
+
+- **Last-admin protection.** Three new guards on the Users page so an operator cannot accidentally lock themselves out of the portal: (1) you can no longer change your OWN role, only another admin can demote you, (2) the last remaining admin cannot be demoted to operator/viewer, (3) the last remaining admin cannot be deleted (single delete + bulk delete both refuse). Each rejection surfaces a flash explaining what to do instead.
+- **Installer credentials banner now matches the actual bind host.** Fresh install on a public VPS with the default `host = 127.0.0.1` used to print the box's public IP as the admin URL, then the operator typed it in their browser and got connection refused. Banner now lists every detected IP only when `host = 0.0.0.0`; otherwise shows just the bound interface plus a hint how to expose externally.
+- **Add Server is one button** instead of two. The previous "Test Connection" + "Add Server" pair was confusing - operators kept hitting Add expecting it to work, found it greyed out, and gave up. Single primary button now runs the test and posts the create form on green.
+- **Test Connection actually validates the token.** Pre-create probe used to hit only `apiinfo.version` (unauthenticated) so a wrong token still returned green. Now it also runs `host.get(limit=1)` and yellow-flags an "API online but token rejected" case, blocking the create until the token works.
+- **Token form / list polish:** expired tokens render as Expired (warning yellow) instead of Active; past expiry dates are rejected at form submit; renaming a token to an existing token's name is rejected with a clear duplicate-name error; long token / template / server names truncate with ellipsis on cards instead of stretching across the page.
+- **Sortable table headers actually sort now.** /tokens and /users had decorative ↕ glyphs but no click handler. New client-side sort helper handles every `<th class="sortable">` (audit log keeps its server-side htmx sort).
+
+### Fixed
+
+- **`/servers` Add: friendlier duplicate-name error.** Was leaking tomlkit's internal "Key" wording (`Failed to add server: Key "shit" already exists.`). Now reads `A server named 'shit' already exists. Pick a different name.` Same fix in `add_config_table()` so any future caller gets a clean message too.
+- **Token edit silently dropped duplicate-name rename.** Tokens with different ids but the same display name were technically allowed (no id collision) but rendered ambiguously. Both create and edit paths now reject duplicate display names with `Another token already uses the name 'shit'. Pick a different one.`
+- **Past expiry date.** Form-submit reject on both create and edit, message: `Expiry date '...' is in the past. Pick a future date or leave the field empty for no expiry.`
+- **Expired token shown as Active.** New `is_expired` property on `TokenInfo` (compares `expires_at` to now); list and detail pages render Expired badge when true. Priority order: revoked > expired > active.
+- **Card / page title overflow.** `.card-title`, `.server-card-name`, `.page-title` now truncate long user-controlled text with ellipsis; full string lives in the `title` attribute (visible on hover).
+- **Sortable headers wired up.** Reusable client-side helper in `base.html` handles `<th class="sortable">` click; toggles asc/desc on subsequent clicks; numeric columns parse as numbers, text columns use `localeCompare`. Skips empty-state rows.
+- **Token success card lands above the fold.** After a successful create the page re-renders with the raw token in a green card; on a small viewport the Public-URL banner could push it below the fold. Page now smooth-scrolls the card into view on load.
+- **Self-delete on the Users page used to surface a bare 303** that looked like success. Now flash-error with a clear message; "user not found" branch on delete also surfaced as a flash error instead of falling through to None response.
+
+### Changed
+
+- **Bulk delete cap of 500 ids per request** lifted to a module-level `BULK_DELETE_MAX` constant in tokens.py / users.py / templates.py (was hard-coded inline). Same value, just maintainable in one place.
+- **Server name regex `^[a-zA-Z][a-zA-Z0-9_-]*$`** now a precompiled module-level constant (`_SERVER_NAME_RE`) used by both create and edit handlers; no drift risk if one path tweaks the regex.
+- **`update_check.py` docstrings refreshed** to match the v1.24 lazy-login behaviour (the daemon-thread description was stale).
+- **`_validate_and_dedupe_ips()` extracted** in tokens.py - both create and edit paths shared a 15-line normalize-and-dedupe block, now one helper.
+
+### Tag policy
+
+- v1.24 tag remains pinned to `e40854f` - the original release plus the two critical CSS fixes (tooltip `?`-circle SVG render in Firefox / strict-CSS browsers, and the `?v={{ version }}` cache-bust on `style.css` so future releases do not need a hard-refresh). Everything else from this list landed on `main` after the tag and ships in v1.25.
+
 ## v1.24 - 2026-04-27
 
 Field-test feedback round. Two testers (G0nz0uk and Dmitry Lambert)
