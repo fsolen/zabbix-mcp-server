@@ -3,11 +3,11 @@ FROM registry.access.redhat.com/ubi9/python-312 AS builder
 USER root
 WORKDIR /build
 
-RUN microdnf install -y \
+RUN dnf install -y \
         gcc \
         python3-devel \
         libffi-devel \
-    && microdnf clean all
+    && dnf clean all
 
 COPY . .
 
@@ -29,13 +29,13 @@ LABEL org.opencontainers.image.version="1.25"
 
 USER root
 
-RUN microdnf install -y \
+RUN dnf install -y \
         cairo \
         pango \
         gdk-pixbuf2 \
         libffi \
         shared-mime-info \
-    && microdnf clean all
+    && dnf clean all
 
 RUN useradd --system --home-dir /opt/zabbix-mcp --shell /sbin/nologin zabbix-mcp \
     && mkdir -p /var/log/zabbix-mcp /etc/zabbix-mcp \
