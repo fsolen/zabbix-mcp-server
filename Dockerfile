@@ -21,7 +21,7 @@ WORKDIR /build
 COPY . .
 # Install build dependencies
 USER 0
-RUN microdnf update -y && microdnf install -y \
+RUN dnf -y update && dnf -y install \
     gcc \
     make \
     git \
@@ -30,7 +30,7 @@ RUN microdnf update -y && microdnf install -y \
     pango-devel \
     gdk-pixbuf2-devel \
     shared-mime-info \
-    && microdnf clean all
+    && dnf clean all
 
 # Create venv and install dependencies
 RUN python -m venv /opt/zabbix-mcp/venv \
@@ -52,13 +52,13 @@ LABEL org.opencontainers.image.version="1.25"
 
 # System libs for weasyprint PDF rendering
 USER 0
-RUN microdnf update -y && microdnf install -y \
+RUN dnf -y update && dnf -y install \
     cairo \
     pango \
     gdk-pixbuf2 \
     libffi \
     shared-mime-info \
-    && microdnf clean all
+    && dnf clean all
 
 RUN useradd --system --shell /usr/sbin/nologin --home-dir /opt/zabbix-mcp zabbix-mcp \
     && mkdir -p /var/log/zabbix-mcp /etc/zabbix-mcp \
