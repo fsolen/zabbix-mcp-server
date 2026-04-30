@@ -1,29 +1,21 @@
-#
-# Zabbix MCP Server
-# Copyright (C) 2026 initMAX s.r.o.
-#
-# This program is free software: you can redistribute it and/or modify it under
-# the terms of the GNU Affero General Public License as published by the Free
-# Software Foundation, version 3.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
-# details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
-#
+FROM registry.access.redhat.com/ubi9/python-312 AS builder
 
-FROM debian:bookworm-slim AS builder
-RUN apt-get update && apt-get install -y python3 python3-venv python3-pip
+USER root
 WORKDIR /build
-COPY . .
-RUN python -m venv /opt/zabbix-mcp/venv \
-    && /opt/zabbix-mcp/venv/bin/pip install --no-cache-dir --quiet ".[reporting]"
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y python3 python3-venv python3-pip
+RUN microdnf install -y \
+        gcc \
+        python3-devel \
+        libffi-devel \
+    && microdnf clean all
+
+COPY . .
+
+RUN python3 -m venv /opt/zabbix-mcp/venv \
+    && /opt/zabbix-mcp/venv/bin/pip install --upgrade pip \
+    && /opt/zabbix-mcp/venv/bin/pip install --no-cache-dir ".[reporting]"
+
+FROM registry.access.redhat.com/ubi9/python-312
 
 LABEL maintainer="initMAX s.r.o. <info@initmax.com>"
 LABEL org.opencontainers.image.title="Zabbix MCP Server"
@@ -35,17 +27,20 @@ LABEL org.opencontainers.image.vendor="initMAX s.r.o."
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
 LABEL org.opencontainers.image.version="1.25"
 
-# System libs for weasyprint PDF rendering
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 \
-    libffi8 shared-mime-info \
-    && rm -rf /var/lib/apt/lists/*
+USER root
 
-RUN useradd --system --shell /usr/sbin/nologin --home-dir /opt/zabbix-mcp zabbix-mcp \
+RUN microdnf install -y \
+        cairo \
+        pango \
+        gdk-pixbuf2 \
+        libffi \
+        shared-mime-info \
+    && microdnf clean all
+
+RUN useradd --system --home-dir /opt/zabbix-mcp --shell /sbin/nologin zabbix-mcp \
     && mkdir -p /var/log/zabbix-mcp /etc/zabbix-mcp \
     && mkdir -p /etc/zabbix-mcp/assets /etc/zabbix-mcp/tls /etc/zabbix-mcp/templates \
-    && chown zabbix-mcp:zabbix-mcp /var/log/zabbix-mcp /etc/zabbix-mcp \
-    && chown zabbix-mcp:zabbix-mcp /etc/zabbix-mcp/assets /etc/zabbix-mcp/tls /etc/zabbix-mcp/templates \
+    && chown -R zabbix-mcp:zabbix-mcp /var/log/zabbix-mcp /etc/zabbix-mcp \
     && chmod 750 /etc/zabbix-mcp/tls /etc/zabbix-mcp/templates
 
 COPY --from=builder /opt/zabbix-mcp/venv /opt/zabbix-mcp/venv
@@ -53,11 +48,12 @@ COPY --from=builder /opt/zabbix-mcp/venv /opt/zabbix-mcp/venv
 ENV PATH="/opt/zabbix-mcp/venv/bin:$PATH"
 
 USER zabbix-mcp
+
 EXPOSE 8080
 EXPOSE 9090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
 
 ENTRYPOINT ["/opt/zabbix-mcp/venv/bin/zabbix-mcp-server"]
 CMD ["--config", "/etc/zabbix-mcp/config.toml"]
